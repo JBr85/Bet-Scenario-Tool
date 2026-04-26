@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+        .stat-card { border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .pnl-positive { color: #28a745; font-weight: bold; }
+        .pnl-negative { color: #dc3545; font-weight: bold; }
+        .results-table { font-size: 0.9rem; }
+        .league-check-group { max-height: 180px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; background: #fff; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/" class="active"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analysis</a>
+            <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Dashboard</h2>
+                <span class="badge bg-secondary fs-6"><i class="fas fa-database me-1"></i> {{ record_count }} records</span>
+            </div>
+
+            <!-- Configuration Panel -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-sliders me-2"></i> Analysis Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- League Selection -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Leagues</strong></label>
+                            <div class="mb-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllLeagues()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllLeagues()">None</button>
+                            </div>
+                            <div class="league-check-group" id="leagueContainer">
+                                {% for league in leagues %}
+                                <div class="form-check">
+                                    <input class="form-check-input league-checkbox" type="checkbox"
+                                           value="{{ league.label }}" id="lg_{{ loop.index }}">
+                                    <label class="form-check-label small" for="lg_{{ loop.index }}">
+                                        {{ league.label }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                                {% if not leagues %}
+                                <div class="text-muted small p-1">No leagues detected. Load data first.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all leagues</small>
+                        </div>
+
+                        <!-- Market Selection -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Markets</strong></label>
+                            <div class="mb-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllMarkets()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllMarkets()">None</button>
+                            </div>
+                            <div class="league-check-group" id="marketContainer">
+                                {% for market in markets %}
+                                <div class="form-check">
+                                    <input class="form-check-input market-checkbox" type="checkbox"
+                                           value="{{ market }}" id="mkt_{{ loop.index }}">
+                                    <label class="form-check-label small" for="mkt_{{ loop.index }}">{{ market }}</label>
+                                </div>
+                                {% endfor %}
+                                {% if not markets %}
+                                <div class="text-muted small p-1">No markets detected. Load data first.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all markets</small>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Date Range</strong></label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="allDates" checked onchange="toggleDateRange()">
+                                <label class="form-check-label" for="allDates"><strong>All dates</strong></label>
+                            </div>
+                            <div id="dateRangeInputs" style="display:none;">
+                                <div class="mb-2">
+                                    <label class="small text-muted">From</label>
+                                    <input type="date" class="form-control form-control-sm" id="dateStart" value="{{ config.date_start or date_min }}">
+                                </div>
+                                <div>
+                                    <label class="small text-muted">To</label>
+                                    <input type="date" class="form-control form-control-sm" id="dateEnd" value="{{ config.date_end or date_max }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Time Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Time Range</strong></label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="allTimes" checked onchange="toggleTimeRange()">
+                                <label class="form-check-label" for="allTimes"><strong>All times</strong></label>
+                            </div>
+                            <div id="timeRangeInputs" style="display:none;">
+                                <div class="mb-2">
+                                    <label class="small text-muted">From</label>
+                                    <input type="time" class="form-control form-control-sm" id="timeStart" value="00:00">
+                                </div>
+                                <div>
+                                    <label class="small text-muted">To</label>
+                                    <input type="time" class="form-control form-control-sm" id="timeEnd" value="23:59">
+                                </div>
+                                <small class="text-muted">PDF bets (date only) always included</small>
+                            </div>
+                        </div>
+
+                        <!-- Staking -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Staking Strategy</strong></label>
+                            <select class="form-select form-select-sm mb-2" id="stakingStrategy">
+                                <option value="flat" {% if config.staking_strategy == 'flat' %}selected{% endif %}>Flat Stake</option>
+                                <option value="compounding" {% if config.staking_strategy == 'compounding' %}selected{% endif %}>Compounding</option>
+                                <option value="fibonacci" {% if config.staking_strategy == 'fibonacci' %}selected{% endif %}>Fibonacci</option>
+                            </select>
+                            <label class="small text-muted">Base Stake (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="baseStake" value="{{ config.base_stake or 20 }}">
+                            <label class="small text-muted">Starting Bank (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="dailyBank" value="{{ config.daily_bank }}">
+                            <label class="small text-muted">Stake % (compounding)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="stakePercentage" value="{{ config.stake_percentage }}" max="100">
+                            <label class="small text-muted">Commission % <span class="text-muted">(on winnings)</span></label>
+                            <input type="number" class="form-control form-control-sm" id="commission" value="{{ config.commission or 0 }}" min="0" max="100" step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small text-muted">Odds Range</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" id="oddsMin" value="{{ config.odds_min }}" step="0.1" min="1" placeholder="Min">
+                                <span class="input-group-text">–</span>
+                                <input type="number" class="form-control" id="oddsMax" value="{{ config.odds_max }}" step="0.1" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <button class="btn btn-success w-100" onclick="runAnalysis()" id="runBtn">
+                                <i class="fas fa-play me-2"></i> Run Analysis
+                            </button>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <a href="/analysis" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-chart-bar me-2"></i> Full Analysis
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card stat-card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h6>Total Bets</h6>
+                            <h3 id="totalBets">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h6>Win Rate</h6>
+                            <h3 id="winRate">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h6>Total P&L</h6>
+                            <h3 id="totalPnL">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h6>ROI</h6>
+                            <h3 id="roi">–</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Data -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-upload me-2"></i> Import Data</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Upload CSV</h6>
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="input-group">
+                                    <input type="file" class="form-control" name="file" accept=".csv">
+                                    <button type="submit" class="btn btn-primary">Upload</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>PDF History</h6>
+                            <button class="btn btn-warning" onclick="processPDF()" id="pdfBtn">
+                                <i class="fas fa-file-pdf me-2"></i> Import from PDF
+                            </button>
+                            <div id="pdfStatus" class="mt-2 small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Summary -->
+            <div class="card" id="resultsCard" style="display:none;">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-calendar me-2"></i> Daily Summary</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped results-table mb-0">
+                            <thead class="table-dark">
+                                <tr><th>Date</th><th>Bets</th><th>W / L</th><th>P&L</th></tr>
+                            </thead>
+                            <tbody id="resultsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function getSelectedLeagues() {
+        return Array.from(document.querySelectorAll('.league-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = false); }
+
+    function getSelectedMarkets() {
+        return Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = false); }
+
+    function toggleDateRange() {
+        const all = document.getElementById('allDates').checked;
+        document.getElementById('dateRangeInputs').style.display = all ? 'none' : 'block';
+    }
+
+    function toggleTimeRange() {
+        const all = document.getElementById('allTimes').checked;
+        document.getElementById('timeRangeInputs').style.display = all ? 'none' : 'block';
+    }
+
+    function runAnalysis() {
+        const allDates = document.getElementById('allDates').checked;
+        const allTimes = document.getElementById('allTimes').checked;
+        const config = {
+            selected_leagues: getSelectedLeagues(),
+            selected_markets: getSelectedMarkets(),
+            odds_min: parseFloat(document.getElementById('oddsMin').value) || 1.0,
+            odds_max: parseFloat(document.getElementById('oddsMax').value) || 100.0,
+            staking_strategy: document.getElementById('stakingStrategy').value,
+            daily_bank: parseFloat(document.getElementById('dailyBank').value) || 1000,
+            stake_percentage: parseFloat(document.getElementById('stakePercentage').value) || 2,
+            base_stake: parseFloat(document.getElementById('baseStake').value) || 20,
+            date_start: allDates ? null : (document.getElementById('dateStart').value || null),
+            date_end: allDates ? null : (document.getElementById('dateEnd').value || null),
+            time_start: allTimes ? null : (document.getElementById('timeStart').value || null),
+            time_end: allTimes ? null : (document.getElementById('timeEnd').value || null),
+            commission: parseFloat(document.getElementById('commission').value) || 0,
+        };
+
+        const btn = document.getElementById('runBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running...';
+
+        fetch('/api/analyze', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+            if (data.error) { alert('Error: ' + data.error); return; }
+
+            document.getElementById('totalBets').textContent = data.total_bets || 0;
+            document.getElementById('winRate').textContent = (data.win_rate || 0).toFixed(1) + '%';
+
+            const pnl = data.total_pnl || 0;
+            const pnlEl = document.getElementById('totalPnL');
+            pnlEl.textContent = '£' + pnl.toFixed(2);
+            pnlEl.className = pnl >= 0 ? 'pnl-positive h3' : 'pnl-negative h3';
+
+            document.getElementById('roi').textContent = (data.roi || 0).toFixed(2) + '%';
+
+            if (data.daily_results && data.daily_results.length > 0) {
+                document.getElementById('resultsCard').style.display = 'block';
+                const rows = data.daily_results.map(day => {
+                    const cls = day.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    return `<tr>
+                        <td>${day.date}</td>
+                        <td>${day.bets}</td>
+                        <td>${day.won}W / ${day.lost}L</td>
+                        <td class="${cls}">£${day.pnl.toFixed(2)}</td>
+                    </tr>`;
+                });
+                document.getElementById('resultsTable').innerHTML = rows.join('');
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+            alert('Analysis failed. Check console for details.');
+            console.error(err);
+        });
+    }
+
+    function processPDF() {
+        const btn = document.getElementById('pdfBtn');
+        const status = document.getElementById('pdfStatus');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
+        status.innerHTML = '';
+
+        fetch('/api/process-pdf', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF';
+            if (data.error) {
+                status.innerHTML = `<span class="text-danger"><i class="fas fa-times me-1"></i>${data.error}</span>`;
+            } else {
+                status.innerHTML = `<span class="text-success"><i class="fas fa-check me-1"></i>Extracted ${data.extracted}, added ${data.added} new. Total: ${data.total} records.</span>`;
+                setTimeout(() => location.reload(), 1800);
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF';
+            status.innerHTML = '<span class="text-danger">Failed — check server logs</span>';
+        });
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        fetch('/api/upload', {method: 'POST', body: new FormData(this)})
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Added ${data.added} new records (total: ${data.total})`);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        });
+    });
+</script>
+</body>
+</html>

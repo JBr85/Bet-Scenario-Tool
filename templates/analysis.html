@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            background: #1a1a2e;
+        }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+        .pnl-positive { color: #28a745; font-weight: bold; }
+        .pnl-negative { color: #dc3545; font-weight: bold; }
+        .league-check-group { max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; background: #fff; }
+        th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.sortable:hover { background-color: rgba(255,255,255,0.15); }
+        .sort-icon { font-size: 0.7em; opacity: 0.7; margin-left: 4px; }
+        .section-header { cursor: pointer; }
+        .section-header .collapse-icon { transition: transform 0.2s; }
+        .section-header.collapsed .collapse-icon { transform: rotate(-90deg); }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis" class="active"><i class="fas fa-chart-bar me-2"></i> Analysis</a>
+            <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+            <h2 class="mb-4">Analysis Results</h2>
+
+            <!-- Change Analysis Config -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white section-header" data-bs-toggle="collapse" data-bs-target="#configPanel">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-sliders me-2"></i> Change Analysis <small class="ms-2 opacity-75">(click to expand)</small></span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="collapse" id="configPanel">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label"><strong>Leagues</strong></label>
+                                <div class="mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllLeagues()">All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllLeagues()">None</button>
+                                </div>
+                                <div class="league-check-group" id="leagueContainer">
+                                    {% for league in leagues %}
+                                    <div class="form-check">
+                                        <input class="form-check-input league-checkbox" type="checkbox"
+                                               value="{{ league.label }}" id="alg_{{ loop.index }}"
+                                               {% if league.label in config.selected_leagues %}checked{% endif %}>
+                                        <label class="form-check-label small" for="alg_{{ loop.index }}">{{ league.label }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <small class="text-muted">Leave all unchecked = all leagues</small>
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label"><strong>Markets</strong></label>
+                                <div class="mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllMarkets()">All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllMarkets()">None</button>
+                                </div>
+                                <div class="league-check-group" id="marketContainer">
+                                    {% for market in markets %}
+                                    <div class="form-check">
+                                        <input class="form-check-input market-checkbox" type="checkbox"
+                                               value="{{ market }}" id="amkt_{{ loop.index }}"
+                                               {% if market in config.selected_markets %}checked{% endif %}>
+                                        <label class="form-check-label small" for="amkt_{{ loop.index }}">{{ market }}</label>
+                                    </div>
+                                    {% endfor %}
+                                    {% if not markets %}
+                                    <div class="text-muted small p-1">No markets detected.</div>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">Leave all unchecked = all markets</small>
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label"><strong>Date Range</strong></label>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" id="allDatesA" checked onchange="toggleDateRangeA()">
+                                    <label class="form-check-label" for="allDatesA">All dates</label>
+                                </div>
+                                <div id="dateRangeInputsA" style="display:none;" class="mb-2">
+                                    <label class="small text-muted">From</label>
+                                    <input type="date" class="form-control form-control-sm mb-1" id="dateStartA" value="{{ config.date_start or date_min }}">
+                                    <label class="small text-muted">To</label>
+                                    <input type="date" class="form-control form-control-sm" id="dateEndA" value="{{ config.date_end or date_max }}">
+                                </div>
+                                <label class="form-label mt-1"><strong>Time Range</strong></label>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" id="allTimesA" checked onchange="toggleTimeRangeA()">
+                                    <label class="form-check-label" for="allTimesA">All times</label>
+                                </div>
+                                <div id="timeRangeInputsA" style="display:none;" class="mb-2">
+                                    <label class="small text-muted">From</label>
+                                    <input type="time" class="form-control form-control-sm mb-1" id="timeStartA" value="00:00">
+                                    <label class="small text-muted">To</label>
+                                    <input type="time" class="form-control form-control-sm" id="timeEndA" value="23:59">
+                                    <small class="text-muted">PDF bets always included</small>
+                                </div>
+                                <label class="form-label mt-1"><strong>Odds Range</strong></label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" class="form-control" id="oddsMinA" value="{{ config.odds_min }}" step="0.1" min="1">
+                                    <span class="input-group-text">–</span>
+                                    <input type="number" class="form-control" id="oddsMaxA" value="{{ config.odds_max }}" step="0.1">
+                                </div>
+                            </div>
+
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label"><strong>Staking</strong></label>
+                                <select class="form-select form-select-sm mb-2" id="stakingStrategyA">
+                                    <option value="flat" {% if config.staking_strategy == 'flat' %}selected{% endif %}>Flat Stake</option>
+                                    <option value="compounding" {% if config.staking_strategy == 'compounding' %}selected{% endif %}>Compounding</option>
+                                    <option value="fibonacci" {% if config.staking_strategy == 'fibonacci' %}selected{% endif %}>Fibonacci</option>
+                                </select>
+                                <label class="small text-muted">Base Stake (£)</label>
+                                <input type="number" class="form-control form-control-sm mb-2" id="baseStakeA" value="{{ config.base_stake or 20 }}">
+                                <label class="small text-muted">Starting Bank (£)</label>
+                                <input type="number" class="form-control form-control-sm mb-2" id="dailyBankA" value="{{ config.daily_bank }}">
+                                <label class="small text-muted">Stake % (compounding)</label>
+                                <input type="number" class="form-control form-control-sm mb-2" id="stakePercentageA" value="{{ config.stake_percentage }}">
+                                <label class="small text-muted">Commission % <span class="text-muted">(on winnings)</span></label>
+                                <input type="number" class="form-control form-control-sm" id="commissionA" value="{{ config.commission or 0 }}" min="0" max="100" step="0.1">
+                            </div>
+                        </div>
+                        <button class="btn btn-success" onclick="rerunAnalysis()" id="rerunBtn">
+                            <i class="fas fa-sync me-2"></i> Re-run Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row mb-4" id="summaryCards">
+                <div class="col-md-2">
+                    <div class="card bg-primary text-white text-center">
+                        <div class="card-body py-2">
+                            <h6>Total Bets</h6>
+                            <h3 id="aTotalBets">{{ results.total_bets if results else '–' }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-success text-white text-center">
+                        <div class="card-body py-2">
+                            <h6>Won</h6>
+                            <h3 id="aWon">{{ results.won if results else '–' }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-danger text-white text-center">
+                        <div class="card-body py-2">
+                            <h6>Lost</h6>
+                            <h3 id="aLost">{{ results.lost if results else '–' }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card bg-info text-white text-center">
+                        <div class="card-body py-2">
+                            <h6>Win Rate</h6>
+                            <h3 id="aWinRate">{{ "%.1f"|format(results.win_rate) + '%' if results else '–' }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-center">
+                        <div class="card-body py-2">
+                            <h6>Total P&L</h6>
+                            <h3 id="aTotalPnl" class="{{ 'pnl-positive' if results and results.total_pnl > 0 else 'pnl-negative' }}">
+                                £{{ "%.2f"|format(results.total_pnl) if results else '–' }}
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-center">
+                        <div class="card-body py-2">
+                            <h6>ROI</h6>
+                            <h3 id="aRoi" class="{{ 'pnl-positive' if results and results.roi > 0 else 'pnl-negative' }}">
+                                {{ "%.2f"|format(results.roi) + '%' if results else '–' }}
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if results %}
+            <!-- Strategy / Final Bank -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Strategy</h6>
+                            <h4 id="aStrategy">{{ results.strategy|title }}</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Final Bank</h6>
+                            <h4 id="aFinalBank" class="{{ 'pnl-positive' if results.final_bank > results.get('daily_bank', 1000) else 'pnl-negative' }}">
+                                £{{ "%.2f"|format(results.final_bank) }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Total Stake</h6>
+                            <h4 id="aTotalStake">£{{ "%.2f"|format(results.total_stake) }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Results -->
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white section-header" id="dailyHeader" data-bs-toggle="collapse" data-bs-target="#dailyBody">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span>Daily Breakdown</span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="collapse show" id="dailyBody">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0" id="dailyTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th class="sortable" onclick="sortTable('dailyTable',0)">Date <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',1)">Bets <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',2)">Won <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',3)">Lost <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',4)">Start Bank <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',5)">Stake/Bet <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',6)">Staked <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',7)">P&amp;L <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',8)">End Bank <span class="sort-icon"></span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for day in results.daily_results %}
+                                    <tr>
+                                        <td>{{ day.date }}</td>
+                                        <td>{{ day.bets }}</td>
+                                        <td>{{ day.won }}</td>
+                                        <td>{{ day.lost }}</td>
+                                        <td>£{{ "%.2f"|format(day.start_bank) }}</td>
+                                        <td>£{{ "%.2f"|format(day.stake_per_bet) }}</td>
+                                        <td>£{{ "%.2f"|format(day.staked) }}</td>
+                                        <td class="{{ 'pnl-positive' if day.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(day.pnl) }}</td>
+                                        <td class="{{ 'pnl-positive' if day.end_bank > day.start_bank else ('pnl-negative' if day.end_bank < day.start_bank else '') }}">£{{ "%.2f"|format(day.end_bank) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weekly Results -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white section-header" id="weeklyHeader" data-bs-toggle="collapse" data-bs-target="#weeklyBody">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span>Weekly Breakdown</span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="collapse show" id="weeklyBody">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0" id="weeklyTable">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',0)">Week <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',1)">Bets <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',2)">Won <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',3)">Lost <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',4)">Start Bank <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',5)">Staked <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',6)">P&amp;L <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',7)">End Bank <span class="sort-icon"></span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for week in results.weekly_results %}
+                                    <tr>
+                                        <td>{{ week.week }}</td>
+                                        <td>{{ week.bets }}</td>
+                                        <td>{{ week.won }}</td>
+                                        <td>{{ week.lost }}</td>
+                                        <td>£{{ "%.2f"|format(week.start_bank) }}</td>
+                                        <td>£{{ "%.2f"|format(week.staked) }}</td>
+                                        <td class="{{ 'pnl-positive' if week.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(week.pnl) }}</td>
+                                        <td class="{{ 'pnl-positive' if week.end_bank > week.start_bank else ('pnl-negative' if week.end_bank < week.start_bank else '') }}">£{{ "%.2f"|format(week.end_bank) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- League Breakdown -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white section-header" id="leagueHeader" data-bs-toggle="collapse" data-bs-target="#leagueBody">
+                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-globe me-2"></i>League Breakdown</span>
+                        <i class="fas fa-chevron-down collapse-icon"></i>
+                    </h5>
+                </div>
+                <div class="collapse show" id="leagueBody">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped mb-0" id="leagueTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th class="sortable" onclick="sortTable('leagueTable',0)">League <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',1)">Bets <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',2)">Won <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',3)">Lost <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',4)">Win% <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',5)">P&amp;L <span class="sort-icon"></span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in results.league_breakdown %}
+                                    <tr>
+                                        <td>{{ row.league }}</td>
+                                        <td>{{ row.bets }}</td>
+                                        <td>{{ row.won }}</td>
+                                        <td>{{ row.lost }}</td>
+                                        <td>{{ "%.1f"|format(row.win_rate) }}%</td>
+                                        <td class="{{ 'pnl-positive' if row.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(row.pnl) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">No results yet — run analysis from the Dashboard or use the panel above.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // ---- Collapse chevron sync ----
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(toggler) {
+        var targetId = toggler.getAttribute('data-bs-target');
+        var target = document.querySelector(targetId);
+        if (!target) return;
+        target.addEventListener('show.bs.collapse', function() {
+            toggler.classList.remove('collapsed');
+        });
+        target.addEventListener('hide.bs.collapse', function() {
+            toggler.classList.add('collapsed');
+        });
+    });
+
+    // ---- Table sorting ----
+    var sortState = {};
+
+    function sortTable(tableId, colIndex) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var tbody = table.querySelector('tbody');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+
+        var state = sortState[tableId] || {col: -1, asc: true};
+        var asc = (state.col === colIndex) ? !state.asc : true;
+        sortState[tableId] = {col: colIndex, asc: asc};
+
+        rows.sort(function(a, b) {
+            var aText = a.cells[colIndex] ? a.cells[colIndex].textContent.trim() : '';
+            var bText = b.cells[colIndex] ? b.cells[colIndex].textContent.trim() : '';
+            var aNum = parseFloat(aText.replace(/[£%,]/g, ''));
+            var bNum = parseFloat(bText.replace(/[£%,]/g, ''));
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+                return asc ? aNum - bNum : bNum - aNum;
+            }
+            return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+        });
+
+        rows.forEach(function(r) { tbody.appendChild(r); });
+
+        // Update sort indicators
+        table.querySelectorAll('th').forEach(function(th, i) {
+            var icon = th.querySelector('.sort-icon');
+            if (icon) icon.textContent = (i === colIndex) ? (asc ? ' ▲' : ' ▼') : '';
+        });
+    }
+
+    // ---- League helpers ----
+    function getSelectedLeagues() {
+        return Array.from(document.querySelectorAll('.league-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = false); }
+
+    // ---- Market helpers ----
+    function getSelectedMarkets() {
+        return Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = false); }
+
+    function toggleDateRangeA() {
+        var all = document.getElementById('allDatesA').checked;
+        document.getElementById('dateRangeInputsA').style.display = all ? 'none' : 'block';
+    }
+
+    function toggleTimeRangeA() {
+        var all = document.getElementById('allTimesA').checked;
+        document.getElementById('timeRangeInputsA').style.display = all ? 'none' : 'block';
+    }
+
+    function rerunAnalysis() {
+        var allDates = document.getElementById('allDatesA').checked;
+        var allTimes = document.getElementById('allTimesA').checked;
+        var config = {
+            selected_leagues: getSelectedLeagues(),
+            selected_markets: getSelectedMarkets(),
+            odds_min: parseFloat(document.getElementById('oddsMinA').value) || 1.0,
+            odds_max: parseFloat(document.getElementById('oddsMaxA').value) || 100.0,
+            staking_strategy: document.getElementById('stakingStrategyA').value,
+            daily_bank: parseFloat(document.getElementById('dailyBankA').value) || 1000,
+            stake_percentage: parseFloat(document.getElementById('stakePercentageA').value) || 2,
+            base_stake: parseFloat(document.getElementById('baseStakeA').value) || 20,
+            date_start: allDates ? null : (document.getElementById('dateStartA').value || null),
+            date_end: allDates ? null : (document.getElementById('dateEndA').value || null),
+            time_start: allTimes ? null : (document.getElementById('timeStartA').value || null),
+            time_end: allTimes ? null : (document.getElementById('timeEndA').value || null),
+            commission: parseFloat(document.getElementById('commissionA').value) || 0,
+        };
+
+        var btn = document.getElementById('rerunBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running...';
+
+        fetch('/api/analyze', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Re-run Analysis';
+            if (data.error) { alert(data.error); return; }
+
+            document.getElementById('aTotalBets').textContent = data.total_bets || 0;
+            document.getElementById('aWon').textContent = data.won || 0;
+            document.getElementById('aLost').textContent = data.lost || 0;
+            document.getElementById('aWinRate').textContent = (data.win_rate || 0).toFixed(1) + '%';
+            document.getElementById('aStrategy').textContent = (data.strategy || '').replace(/^\w/, function(c) { return c.toUpperCase(); });
+            document.getElementById('aTotalStake').textContent = '£' + (data.total_stake || 0).toFixed(2);
+
+            var pnlEl = document.getElementById('aTotalPnl');
+            pnlEl.textContent = '£' + (data.total_pnl || 0).toFixed(2);
+            pnlEl.className = (data.total_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+            var roiEl = document.getElementById('aRoi');
+            roiEl.textContent = (data.roi || 0).toFixed(2) + '%';
+            roiEl.className = (data.roi || 0) >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+            var fbEl = document.getElementById('aFinalBank');
+            if (fbEl) {
+                fbEl.textContent = '£' + (data.final_bank || 0).toFixed(2);
+                fbEl.className = (data.final_bank || 0) >= config.daily_bank ? 'pnl-positive' : 'pnl-negative';
+            }
+
+            // Rebuild daily table
+            var dailyTbody = document.querySelector('#dailyTable tbody');
+            if (dailyTbody) {
+                dailyTbody.innerHTML = (data.daily_results || []).map(function(day) {
+                    var endCls = day.end_bank > day.start_bank ? 'pnl-positive' : (day.end_bank < day.start_bank ? 'pnl-negative' : '');
+                    return '<tr>' +
+                        '<td>' + day.date + '</td>' +
+                        '<td>' + day.bets + '</td>' +
+                        '<td>' + day.won + '</td>' +
+                        '<td>' + day.lost + '</td>' +
+                        '<td>£' + (day.start_bank || 0).toFixed(2) + '</td>' +
+                        '<td>£' + (day.stake_per_bet || 0).toFixed(2) + '</td>' +
+                        '<td>£' + (day.staked || 0).toFixed(2) + '</td>' +
+                        '<td class="' + (day.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + day.pnl.toFixed(2) + '</td>' +
+                        '<td class="' + endCls + '">£' + (day.end_bank || 0).toFixed(2) + '</td>' +
+                        '</tr>';
+                }).join('');
+                sortState['dailyTable'] = {col: -1, asc: true};
+                document.querySelectorAll('#dailyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
+            }
+
+            // Rebuild weekly table
+            var weeklyTbody = document.querySelector('#weeklyTable tbody');
+            if (weeklyTbody) {
+                weeklyTbody.innerHTML = (data.weekly_results || []).map(function(wk) {
+                    var endCls = wk.end_bank > wk.start_bank ? 'pnl-positive' : (wk.end_bank < wk.start_bank ? 'pnl-negative' : '');
+                    return '<tr>' +
+                        '<td>' + wk.week + '</td>' +
+                        '<td>' + wk.bets + '</td>' +
+                        '<td>' + wk.won + '</td>' +
+                        '<td>' + wk.lost + '</td>' +
+                        '<td>£' + (wk.start_bank || 0).toFixed(2) + '</td>' +
+                        '<td>£' + (wk.staked || 0).toFixed(2) + '</td>' +
+                        '<td class="' + (wk.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + wk.pnl.toFixed(2) + '</td>' +
+                        '<td class="' + endCls + '">£' + (wk.end_bank || 0).toFixed(2) + '</td>' +
+                        '</tr>';
+                }).join('');
+                sortState['weeklyTable'] = {col: -1, asc: true};
+                document.querySelectorAll('#weeklyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
+            }
+
+            // Rebuild league breakdown table
+            var leagueTbody = document.querySelector('#leagueTable tbody');
+            if (leagueTbody) {
+                leagueTbody.innerHTML = (data.league_breakdown || []).map(function(row) {
+                    return '<tr>' +
+                        '<td>' + row.league + '</td>' +
+                        '<td>' + row.bets + '</td>' +
+                        '<td>' + row.won + '</td>' +
+                        '<td>' + row.lost + '</td>' +
+                        '<td>' + row.win_rate.toFixed(1) + '%</td>' +
+                        '<td class="' + (row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + row.pnl.toFixed(2) + '</td>' +
+                        '</tr>';
+                }).join('');
+                sortState['leagueTable'] = {col: -1, asc: true};
+                document.querySelectorAll('#leagueTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Re-run Analysis';
+            console.error(err);
+            alert('Analysis failed. Check console.');
+        });
+    }
+</script>
+</body>
+</html>

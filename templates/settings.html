@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analysis</a>
+            <a href="/settings" class="active"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+            <h2 class="mb-4">Settings</h2>
+
+            <!-- Staking defaults -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Default Staking Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="settingsForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Staking Strategy</label>
+                                <select class="form-select" name="staking_strategy">
+                                    <option value="flat" {% if config.staking_strategy == 'flat' %}selected{% endif %}>Flat Stake</option>
+                                    <option value="compounding" {% if config.staking_strategy == 'compounding' %}selected{% endif %}>Compounding</option>
+                                    <option value="fibonacci" {% if config.staking_strategy == 'fibonacci' %}selected{% endif %}>Fibonacci</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Starting Bank (£)</label>
+                                <input type="number" class="form-control" name="daily_bank" value="{{ config.daily_bank }}">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Base Stake (£)</label>
+                                <input type="number" class="form-control" name="base_stake" value="{{ config.base_stake or 20 }}">
+                                <small class="text-muted">Used for flat and fibonacci strategies</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Stake Percentage (%)</label>
+                                <input type="number" class="form-control" name="stake_percentage" value="{{ config.stake_percentage }}" max="100">
+                                <small class="text-muted">Used for compounding strategy</small>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Data Management -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Data Management</h5>
+                </div>
+                <div class="card-body">
+                    <p>Records loaded: <strong>{{ record_count }}</strong></p>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-warning" onclick="deduplicate()">
+                            <i class="fas fa-filter me-2"></i> Remove Duplicates
+                        </button>
+                    </div>
+                    <div id="dedupStatus" class="mt-2 small"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('settingsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const config = {};
+        formData.forEach((v, k) => config[k] = isNaN(v) ? v : parseFloat(v));
+
+        fetch('/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(r => r.json())
+        .then(() => alert('Settings saved.'));
+    });
+
+    function deduplicate() {
+        if (!confirm('Remove duplicate records from the database?')) return;
+        fetch('/api/deduplicate', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            const s = document.getElementById('dedupStatus');
+            s.innerHTML = `<span class="text-success">Removed ${data.deleted} duplicates. ${data.remaining} records remain.</span>`;
+        });
+    }
+</script>
+</body>
+</html>
