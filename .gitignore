@@ -1,6 +1,10 @@
 # Database
 bets.db
 
+# Betfair credentials
+betfair_config.json
+.betfair.key
+
 # Personal betting data
 *.csv
 *.pdf
@@ -22,7 +26,8 @@ dist/
 build/
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 
 # OS

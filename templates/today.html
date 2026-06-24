@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Today's Bets</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+        .pnl-positive { color: #28a745; font-weight: bold; }
+        .pnl-negative { color: #dc3545; font-weight: bold; }
+        th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+        th.sortable:hover { background-color: rgba(255,255,255,0.15); }
+        .sort-icon { font-size: 0.7em; opacity: 0.7; margin-left: 4px; }
+        .status-pending  { background-color: #ffc107; color: #000; }
+        .status-won      { background-color: #28a745; color: #fff; }
+        .status-lost     { background-color: #dc3545; color: #fff; }
+        .status-void     { background-color: #6c757d; color: #fff; }
+        .row-pending { background-color: #fffde7 !important; }
+        .row-won     { background-color: #f0fff4 !important; }
+        .row-lost    { background-color: #fff5f5 !important; }
+        .sport-badge-football { background: #0d6efd; color:#fff; }
+        .sport-badge-hr       { background: #6f4e37; color:#fff; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+            <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+            <a href="/strategies"><i class="fas fa-flask me-2"></i> Strategies</a>
+            <a href="/horses"><i class="fas fa-horse me-2"></i> Horse Racing</a>
+            <a href="/today" class="active"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
+            <a href="/place-bets"><i class="fas fa-ticket-alt me-2"></i> Place Bets</a>
+            <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+
+            <!-- Page header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-0"><i class="fas fa-calendar-day me-2"></i> Today's Bets</h2>
+                    <small class="text-muted">{{ today }}</small>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span id="lastRefreshed" class="text-muted small" style="display:none;"></span>
+                    {% if betfair_configured %}
+                    <button class="btn btn-success" id="refreshBtn" onclick="refreshFromBetfair()">
+                        <i class="fas fa-sync me-2"></i> Refresh from Betfair
+                    </button>
+                    {% else %}
+                    <a href="/settings" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-cog me-1"></i> Configure Betfair to enable refresh
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Status message -->
+            <div id="refreshMsg" style="display:none;" class="alert mb-3"></div>
+
+            <!-- Summary cards -->
+            <div class="row mb-4" id="summaryCards">
+                <div class="col">
+                    <div class="card text-center border-0 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">Total Bets</h6>
+                            <h3 id="cTotal" class="mb-0">{{ bets|length }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card text-center border-warning border-2 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">Pending</h6>
+                            <h3 id="cPending" class="mb-0 text-warning">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card text-center border-success border-2 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">Won</h6>
+                            <h3 id="cWon" class="mb-0 text-success">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card text-center border-danger border-2 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">Lost</h6>
+                            <h3 id="cLost" class="mb-0 text-danger">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card text-center border-0 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">Total Staked</h6>
+                            <h4 id="cStaked" class="mb-0">–</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card text-center border-0 shadow-sm">
+                        <div class="card-body py-2">
+                            <h6 class="text-muted mb-1">P&amp;L</h6>
+                            <h3 id="cPnl" class="mb-0">–</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sport filter tabs -->
+            <ul class="nav nav-tabs mb-3" id="sportTabs">
+                <li class="nav-item">
+                    <button class="nav-link active" onclick="setFilter('all', this)">
+                        All <span class="badge bg-secondary ms-1" id="tabAll">0</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" onclick="setFilter('Football', this)">
+                        <i class="fas fa-futbol me-1"></i> Football
+                        <span class="badge bg-secondary ms-1" id="tabFootball">0</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" onclick="setFilter('Horse Racing', this)">
+                        <i class="fas fa-horse me-1"></i> Horse Racing
+                        <span class="badge bg-secondary ms-1" id="tabHR">0</span>
+                    </button>
+                </li>
+                <li class="nav-item ms-auto d-flex align-items-center gap-2 me-2">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="showPendingOnly" onchange="applyFilter()">
+                        <label class="form-check-label small text-muted" for="showPendingOnly">Pending only</label>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- Bets table -->
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="betsTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th class="sortable" onclick="sortTable(0)">Time <span class="sort-icon"></span></th>
+                                    <th>Sport</th>
+                                    <th class="sortable" onclick="sortTable(2)">Match / Event <span class="sort-icon"></span></th>
+                                    <th class="sortable" onclick="sortTable(3)">Horse / Bet Type <span class="sort-icon"></span></th>
+                                    <th>Cat</th>
+                                    <th class="sortable" onclick="sortTable(5)">Odds <span class="sort-icon"></span></th>
+                                    <th class="sortable" onclick="sortTable(6)">Stake <span class="sort-icon"></span></th>
+                                    <th class="sortable" onclick="sortTable(7)">Status <span class="sort-icon"></span></th>
+                                    <th class="sortable" onclick="sortTable(8)">P&amp;L <span class="sort-icon"></span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="betsTableBody">
+                                {% if not bets %}
+                                <tr><td colspan="9" class="text-center text-muted py-4">No bets recorded for today yet.</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="noResults" class="text-center text-muted py-3" style="display:none;">No bets match current filter.</div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script type="application/json" id="initialBets">{{ bets | tojson }}</script>
+<script>
+    var SETTLED_BETS = JSON.parse(document.getElementById('initialBets').textContent || '[]');
+    var ALL_BETS = SETTLED_BETS.slice();
+    var currentFilter = 'all';
+    var COMMISSION = {{ commission }} / 100;
+
+    function netPnl(rawPnl) {
+        var n = parseFloat(rawPnl || 0);
+        return n > 0 ? Math.round(n * (1 - COMMISSION) * 100) / 100 : n;
+    }
+    var sortState = {col: -1, asc: true};
+
+    // ---- Status classification ----
+    function classifyStatus(bet) {
+        var s = (bet.status || '').toLowerCase();
+        var pnl = parseFloat(bet.pnl || 0);
+        if (s === 'won' || s === 'winner') return 'won';
+        if (s === 'lost' || s === 'loser') return 'lost';
+        if (s === 'void' || s === 'voided' || s === 'refund') return 'void';
+        // Betfair settled records use status='Settled' — determine from pnl
+        if (s === 'settled') {
+            if (pnl > 0) return 'won';
+            if (pnl < 0) return 'lost';
+            return 'void';
+        }
+        return 'pending';
+    }
+
+    function statusLabel(cls) {
+        return {won: 'Won', lost: 'Lost', void: 'Void', pending: 'Pending'}[cls] || 'Pending';
+    }
+
+    function extractTime(bet) {
+        // HR match field starts with "HH:MM Venue" — use that as the race-off time
+        var mMatch = String(bet.match || '').match(/^(\d{2}:\d{2})\s/);
+        if (mMatch) return mMatch[1];
+        // Fallback: placed_date timestamp
+        var m = String(bet.date || '').match(/[T ](\d{2}:\d{2})/);
+        return m ? m[1] : '–';
+    }
+
+    function fmtOdds(v, isSP) {
+        var n = parseFloat(v);
+        if (isSP) return (n && n > 0) ? 'SP (' + n.toFixed(2) + ')' : 'SP';
+        return (n && n > 0) ? n.toFixed(2) : '–';
+    }
+
+    function fmtMoney(v) {
+        var n = parseFloat(v);
+        return isNaN(n) ? '–' : '£' + n.toFixed(2);
+    }
+
+    function sportBadge(sport) {
+        if (!sport) return '<span class="badge bg-secondary">–</span>';
+        var isHR = sport.toLowerCase().includes('horse');
+        var cls = isHR ? 'sport-badge-hr' : 'sport-badge-football';
+        var icon = isHR ? 'fa-horse' : 'fa-futbol';
+        var label = isHR ? 'HR' : 'Ftbl';
+        return '<span class="badge ' + cls + '"><i class="fas ' + icon + ' me-1"></i>' + label + '</span>';
+    }
+
+    function buildRow(bet) {
+        var sc = classifyStatus(bet);
+        var rowCls = 'row-' + sc;
+        var badgeCls = 'status-' + sc;
+        var pnl = netPnl(bet.pnl);
+        var pnlCls = pnl > 0 ? 'pnl-positive' : (pnl < 0 ? 'pnl-negative' : '');
+        var pnlStr = sc === 'pending' ? '<span class="text-muted">–</span>' :
+                     '<span class="' + pnlCls + '">' + (pnl >= 0 ? '+' : '') + fmtMoney(pnl) + '</span>';
+        var cat = bet.bet_category || '–';
+        var market = (bet.market && bet.market !== 'Exchange') ? bet.market : '';
+        var catLabel = (cat !== '–') ? cat : (market || '–');
+        var catBadge = cat === 'Win'   ? 'bg-primary text-white' :
+                       cat === 'Place' ? 'bg-success text-white' :
+                                         'bg-light text-dark border';
+
+        return '<tr class="' + rowCls + '" data-sport="' + (bet.sport || '') + '" data-status="' + sc + '">' +
+            '<td>' + extractTime(bet) + '</td>' +
+            '<td>' + sportBadge(bet.sport) + '</td>' +
+            '<td class="small">' + (bet.match || '–') + '</td>' +
+            '<td class="small">' + (bet.bet_type || '–') + '</td>' +
+            '<td><span class="badge ' + catBadge + '">' + catLabel + '</span></td>' +
+            '<td>' + fmtOdds(bet.odds, bet.is_sp) + '</td>' +
+            '<td>' + fmtMoney(bet.stake) + '</td>' +
+            '<td><span class="badge ' + badgeCls + '">' + statusLabel(sc) + '</span></td>' +
+            '<td>' + pnlStr + '</td>' +
+            '</tr>';
+    }
+
+    function updateSummary(visibleBets) {
+        var pending = 0, won = 0, lost = 0, staked = 0, pnl = 0;
+        visibleBets.forEach(function(b) {
+            var sc = classifyStatus(b);
+            if (sc === 'pending') pending++;
+            else if (sc === 'won') won++;
+            else if (sc === 'lost') lost++;
+            staked += parseFloat(b.stake || 0);
+            pnl += sc !== 'pending' ? netPnl(b.pnl) : 0;
+        });
+        document.getElementById('cTotal').textContent = visibleBets.length;
+        document.getElementById('cPending').textContent = pending;
+        document.getElementById('cWon').textContent = won;
+        document.getElementById('cLost').textContent = lost;
+        document.getElementById('cStaked').textContent = fmtMoney(staked);
+        var pnlEl = document.getElementById('cPnl');
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtMoney(pnl);
+        pnlEl.className = 'mb-0 ' + (pnl > 0 ? 'pnl-positive' : (pnl < 0 ? 'pnl-negative' : ''));
+
+        // Tab badges always reflect totals across ALL bets (regardless of filter)
+        var football = ALL_BETS.filter(function(b) { return (b.sport || '').toLowerCase().includes('football'); }).length;
+        var hr = ALL_BETS.filter(function(b) { return (b.sport || '').toLowerCase().includes('horse'); }).length;
+        document.getElementById('tabAll').textContent = ALL_BETS.length;
+        document.getElementById('tabFootball').textContent = football;
+        document.getElementById('tabHR').textContent = hr;
+    }
+
+    function applyFilter() {
+        var pendingOnly = document.getElementById('showPendingOnly').checked;
+        var rows = document.querySelectorAll('#betsTableBody tr[data-sport]');
+        var visible = 0;
+        rows.forEach(function(row) {
+            var sport = row.getAttribute('data-sport') || '';
+            var status = row.getAttribute('data-status') || '';
+            var sportMatch = currentFilter === 'all' || sport === currentFilter;
+            var statusMatch = !pendingOnly || status === 'pending';
+            if (sportMatch && statusMatch) {
+                row.style.display = '';
+                visible++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        document.getElementById('noResults').style.display = (visible === 0 && ALL_BETS.length > 0) ? 'block' : 'none';
+
+        // Recompute summary cards from the filtered subset of ALL_BETS
+        var visibleBets = ALL_BETS.filter(function(b) {
+            var sport = b.sport || '';
+            var sc = classifyStatus(b);
+            var sportMatch = currentFilter === 'all' || sport === currentFilter;
+            var statusMatch = !pendingOnly || sc === 'pending';
+            return sportMatch && statusMatch;
+        });
+        updateSummary(visibleBets);
+    }
+
+    function setFilter(sport, btn) {
+        currentFilter = sport;
+        document.querySelectorAll('#sportTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
+        btn.classList.add('active');
+        applyFilter();
+    }
+
+    function renderTable(bets) {
+        var tbody = document.getElementById('betsTableBody');
+        if (!bets || bets.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No bets recorded for today yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = bets.map(buildRow).join('');
+        applyFilter();
+    }
+
+    // ---- Sorting ----
+    function sortTable(colIndex) {
+        var asc = (sortState.col === colIndex) ? !sortState.asc : true;
+        sortState = {col: colIndex, asc: asc};
+
+        ALL_BETS.sort(function(a, b) {
+            var vals = [
+                [extractTime(a), extractTime(b)],
+                [(a.sport || ''), (b.sport || '')],
+                [(a.match || ''), (b.match || '')],
+                [(a.bet_type || ''), (b.bet_type || '')],
+                [(a.bet_category || ''), (b.bet_category || '')],
+                [parseFloat(a.odds || 0), parseFloat(b.odds || 0)],
+                [parseFloat(a.stake || 0), parseFloat(b.stake || 0)],
+                [classifyStatus(a), classifyStatus(b)],
+                [parseFloat(a.pnl || 0), parseFloat(b.pnl || 0)],
+            ];
+            var av = vals[colIndex][0], bv = vals[colIndex][1];
+            var result = (typeof av === 'number') ? av - bv : String(av).localeCompare(String(bv));
+            return asc ? result : -result;
+        });
+
+        document.querySelectorAll('#betsTable th .sort-icon').forEach(function(el, i) {
+            el.textContent = (i === colIndex) ? (asc ? ' ▲' : ' ▼') : '';
+        });
+
+        renderTable(ALL_BETS);
+    }
+
+    function setTimestamp() {
+        var now = new Date();
+        var ts = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+        var lr = document.getElementById('lastRefreshed');
+        lr.textContent = 'Last refreshed: ' + ts;
+        lr.style.display = 'inline';
+    }
+
+    function mergePending(settled, pending) {
+        // Show settled bets first, then any pending bets not already in settled
+        var existing = new Set(settled.map(function(b) { return b.id; }).filter(Boolean));
+        var extra = pending.filter(function(p) {
+            // Pending bets have no DB id; include all
+            return !existing.has(p.id);
+        });
+        return settled.concat(extra);
+    }
+
+    // ---- Fetch pending orders on page load ----
+    {% if betfair_configured %}
+    function loadPending() {
+        fetch('/api/today/pending')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var pending = data.bets || [];
+            if (pending.length > 0) {
+                ALL_BETS = mergePending(SETTLED_BETS, pending);
+                renderTable(ALL_BETS);
+                setTimestamp();
+            }
+        })
+        .catch(function() {}); // silent fail — settled bets are still shown
+    }
+    {% endif %}
+
+    // ---- Refresh from Betfair ----
+    function refreshFromBetfair() {
+        var btn = document.getElementById('refreshBtn');
+        var msgEl = document.getElementById('refreshMsg');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Refreshing...';
+        msgEl.style.display = 'none';
+
+        fetch('/api/today/refresh', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Refresh from Betfair';
+            if (data.error) {
+                msgEl.className = 'alert alert-danger mb-3';
+                msgEl.textContent = data.error;
+                msgEl.style.display = 'block';
+                return;
+            }
+            msgEl.className = 'alert alert-success mb-3';
+            msgEl.textContent = data.message;
+            msgEl.style.display = 'block';
+            setTimestamp();
+
+            SETTLED_BETS = data.bets || [];
+            var pending = data.pending_bets || [];
+            ALL_BETS = mergePending(SETTLED_BETS, pending);
+            renderTable(ALL_BETS);
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Refresh from Betfair';
+            msgEl.className = 'alert alert-danger mb-3';
+            msgEl.textContent = 'Refresh failed: ' + err;
+            msgEl.style.display = 'block';
+        });
+    }
+
+    // ---- Init ----
+    renderTable(ALL_BETS);
+    {% if betfair_configured %}
+    loadPending();
+    {% endif %}
+</script>
+</body>
+</html>

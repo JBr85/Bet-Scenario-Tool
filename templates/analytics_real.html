@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bet Scenario Tool - Analytics Simulation</title>
+    <title>Bet Scenario Tool - Analytics Real Data</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
@@ -17,13 +17,25 @@
         .league-check-group { max-height: 180px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; }
         .league-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #f5f5f5; }
         .league-row:last-child { border-bottom: none; }
-        .league-pnl-badge { font-size: 0.65em; min-width: 52px; text-align: center; }
         th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
         th.sortable:hover { background-color: rgba(255,255,255,0.15); }
         .sort-icon { font-size: 0.7em; opacity: 0.7; margin-left: 4px; }
         .section-header { cursor: pointer; }
         .section-header .collapse-icon { transition: transform 0.2s; }
         .section-header.collapsed .collapse-icon { transform: rotate(-90deg); }
+        .market-pill { border: 1px solid #198754; }
+        .market-pill.active { background: #198754; color: #fff; }
+        .market-pill:not(.active) { background: #fff; color: #198754; }
+        tr.bd-group-row { cursor: pointer; }
+        tr.bd-group-row:hover { background-color: #fff3cd; }
+        .bd-caret { display: inline-block; width: 1em; transition: transform 0.15s; color: #997404; }
+        tr.bd-group-row.open .bd-caret { transform: rotate(90deg); }
+        .bd-detail-cell { background: #fbfbfd; padding: 0 !important; }
+        .bd-detail-table { font-size: 0.82rem; margin: 0; }
+        .bd-detail-table th { background: #eef0f3; }
+        .bd-score-exact { font-weight: 600; }
+        .bd-score-bucket { color: #6c757d; font-style: italic; }
+        .bd-score-none { color: #adb5bd; }
     </style>
 </head>
 <body>
@@ -33,8 +45,8 @@
             <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
             <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
             <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
-            <a href="/analysis" class="active"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
-            <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+            <a href="/analytics-real" class="active"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
             <a href="/strategies"><i class="fas fa-flask me-2"></i> Strategies</a>
             <a href="/horses"><i class="fas fa-horse me-2"></i> Horse Racing</a>
             <a href="/today"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
@@ -43,13 +55,14 @@
         </div>
 
         <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
-            <h2 class="mb-4">Analytics — Simulation</h2>
+            <h2 class="mb-1">Analytics — Real Data</h2>
+            <p class="text-muted mb-4 small">Actual P&amp;L and stakes from the database. No staking simulation.</p>
 
-            <!-- Change Analysis Config -->
+            <!-- Filters -->
             <div class="card mb-4">
-                <div class="card-header bg-primary text-white section-header" data-bs-toggle="collapse" data-bs-target="#configPanel">
+                <div class="card-header bg-success text-white section-header" data-bs-toggle="collapse" data-bs-target="#configPanel">
                     <h5 class="mb-0 d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-sliders me-2"></i> Change Analysis <small class="ms-2 opacity-75">(click to expand)</small></span>
+                        <span><i class="fas fa-filter me-2"></i> Filters <small class="ms-2 opacity-75">(click to expand)</small></span>
                         <i class="fas fa-chevron-down collapse-icon"></i>
                     </h5>
                 </div>
@@ -57,14 +70,11 @@
                     <div class="card-body">
                         <div class="row">
                             <!-- League Selection -->
-                            <div class="col-md-3 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><strong>Leagues</strong></label>
                                 <div class="mb-1 d-flex gap-1 flex-wrap">
-                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllLeagues()">All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="selectAllLeagues()">All</button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllLeagues()">None</button>
-                                    <button type="button" class="btn btn-sm btn-outline-info" onclick="loadLeagueProfitability()" title="Show P&amp;L per league with current settings">
-                                        <i class="fas fa-chart-pie me-1"></i>Stats
-                                    </button>
                                 </div>
                                 <div class="league-check-group" id="leagueContainer">
                                     {% for league in leagues %}
@@ -75,7 +85,6 @@
                                                    {% if league.label in config.selected_leagues %}checked{% endif %}>
                                             <label class="form-check-label small" for="alg_{{ loop.index }}">{{ league.label }}</label>
                                         </div>
-                                        <span class="badge bg-secondary league-pnl-badge" data-league="{{ league.label }}">–</span>
                                     </div>
                                     {% endfor %}
                                     {% if not leagues %}
@@ -85,11 +94,11 @@
                                 <small class="text-muted">Leave all unchecked = all leagues</small>
                             </div>
 
-                            <!-- Market Selection -->
-                            <div class="col-md-3 mb-3">
+                            <!-- Market + Source -->
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><strong>Markets</strong></label>
                                 <div class="mb-1">
-                                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllMarkets()">All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-success me-1" onclick="selectAllMarkets()">All</button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllMarkets()">None</button>
                                 </div>
                                 <div class="league-check-group" id="marketContainer">
@@ -106,21 +115,6 @@
                                     {% endif %}
                                 </div>
                                 <small class="text-muted">Leave all unchecked = all markets</small>
-
-                                <label class="form-label mt-3"><strong>Strategy</strong></label>
-                                <div class="border rounded p-2 bg-white">
-                                    <div class="form-check mb-1">
-                                        <input class="form-check-input strategy-checkbox" type="checkbox" value="Over 1.5" id="astrat_over15"
-                                               {% if 'Over 1.5' in (config.selected_strategy_types | default([])) %}checked{% endif %}>
-                                        <label class="form-check-label small" for="astrat_over15">Over 1.5</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input strategy-checkbox" type="checkbox" value="Draw" id="astrat_draw"
-                                               {% if 'Draw' in (config.selected_strategy_types | default([])) %}checked{% endif %}>
-                                        <label class="form-check-label small" for="astrat_draw">Draw</label>
-                                    </div>
-                                </div>
-                                <small class="text-muted">Leave all unchecked = all strategies</small>
 
                                 <label class="form-label mt-3"><strong>Source</strong></label>
                                 <div class="border rounded p-2 bg-white">
@@ -144,17 +138,15 @@
                             </div>
 
                             <!-- Date + Time + Odds -->
-                            <div class="col-md-3 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><strong>Date Range</strong></label>
                                 <div class="mb-2">
                                     <label class="small text-muted">From</label>
-                                    <input type="date" class="form-control form-control-sm" id="dateStartA"
-                                           value="{{ config.date_start or date_min }}">
+                                    <input type="date" class="form-control form-control-sm" id="dateStartA" value="{{ config.date_start or date_min }}">
                                 </div>
                                 <div class="mb-2">
                                     <label class="small text-muted">To</label>
-                                    <input type="date" class="form-control form-control-sm" id="dateEndA"
-                                           value="{{ config.date_end or date_max }}">
+                                    <input type="date" class="form-control form-control-sm" id="dateEndA" value="{{ config.date_end or date_max }}">
                                 </div>
                                 <div class="d-flex gap-1 mb-3">
                                     <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1" onclick="setStartApr9()">
@@ -185,34 +177,26 @@
                                     <input type="number" class="form-control" id="oddsMaxA" value="{{ config.odds_max }}" step="0.1">
                                 </div>
                             </div>
-
-                            <!-- Staking -->
-                            <div class="col-md-3 mb-3">
-                                <label class="form-label"><strong>Staking</strong></label>
-                                <select class="form-select form-select-sm mb-2" id="stakingStrategyA" onchange="onStrategyChange()">
-                                    <option value="flat" {% if config.staking_strategy == 'flat' %}selected{% endif %}>Flat Stake</option>
-                                    <option value="compounding" {% if config.staking_strategy == 'compounding' %}selected{% endif %}>Compounding</option>
-                                    <option value="fibonacci" {% if config.staking_strategy == 'fibonacci' %}selected{% endif %}>Fibonacci</option>
-                                    <option value="compound_then_flat" {% if config.staking_strategy == 'compound_then_flat' %}selected{% endif %}>Compound then Flat</option>
-                                </select>
-                                <label class="small text-muted">Base Stake (£)</label>
-                                <input type="number" class="form-control form-control-sm mb-2" id="baseStakeA" value="{{ config.base_stake or 20 }}">
-                                <label class="small text-muted">Starting Bank (£)</label>
-                                <input type="number" class="form-control form-control-sm mb-2" id="dailyBankA" value="{{ config.daily_bank }}">
-                                <label class="small text-muted">Stake % (compounding)</label>
-                                <input type="number" class="form-control form-control-sm mb-2" id="stakePercentageA" value="{{ config.stake_percentage }}">
-                                <div id="flatCapRow" style="display:none">
-                                    <label class="small text-muted">Cap Stake (£)</label>
-                                    <input type="number" class="form-control form-control-sm mb-2" id="flatCapStakeA" value="100" min="1" step="1">
-                                </div>
-                                <label class="small text-muted">Commission % <span class="text-muted">(on winnings)</span></label>
-                                <input type="number" class="form-control form-control-sm" id="commissionA" value="{{ config.commission or 0 }}" min="0" max="100" step="0.1">
-                            </div>
                         </div>
                         <button class="btn btn-success" onclick="rerunAnalysis()" id="rerunBtn">
-                            <i class="fas fa-sync me-2"></i> Re-run Analysis
+                            <i class="fas fa-sync me-2"></i> Apply Filters
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Quick Market Toggle -->
+            <div class="card mb-3" id="marketToggleCard">
+                <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-bold me-1"><i class="fas fa-tags me-1 text-success"></i>Market:</span>
+                    <button type="button" class="btn btn-sm market-pill active" data-market="__ALL__" onclick="selectAllMarketsPill()">All</button>
+                    {% for market in markets %}
+                    <button type="button" class="btn btn-sm market-pill" data-market="{{ market }}" onclick="toggleMarketPill(this)">{{ market }}</button>
+                    {% endfor %}
+                    {% if not markets %}
+                    <span class="text-muted small">No markets detected.</span>
+                    {% endif %}
+                    <span class="text-muted small ms-auto">Click one to isolate · click several to combine</span>
                 </div>
             </div>
 
@@ -253,7 +237,7 @@
                 <div class="col-md-2">
                     <div class="card text-center">
                         <div class="card-body py-2">
-                            <h6>Total P&L</h6>
+                            <h6>Total P&amp;L</h6>
                             <h3 id="aTotalPnl" class="{{ 'pnl-positive' if results and results.total_pnl > 0 else 'pnl-negative' }}">
                                 £{{ "%.2f"|format(results.total_pnl) if results else '–' }}
                             </h3>
@@ -272,10 +256,10 @@
                 </div>
             </div>
 
-            <!-- P&L Over Time Chart -->
+            <!-- P&L Chart -->
             <div class="card mb-4" {% if not results %}style="display:none;"{% endif %} id="pnlChartCard">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
-                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i> Cumulative P&amp;L Over Time</h6>
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i> Cumulative P&amp;L Over Time (Actual)</h6>
                     <span class="badge {% if results and results.total_pnl >= 0 %}bg-success{% else %}bg-danger{% endif %}" id="chartSummaryBadge">
                         {% if results %}{{ '+' if results.total_pnl >= 0 else '' }}£{{ "%.2f"|format(results.total_pnl) }}{% endif %}
                     </span>
@@ -290,39 +274,9 @@
             </div>
 
             {% if results %}
-            <!-- Strategy / Final Bank -->
-            <div class="row mb-4">
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="text-muted">Strategy</h6>
-                            <h4 id="aStrategy">{{ results.strategy|title }}</h4>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="text-muted">Final Bank</h6>
-                            <h4 id="aFinalBank" class="{{ 'pnl-positive' if results.final_bank > results.get('daily_bank', 1000) else 'pnl-negative' }}">
-                                £{{ "%.2f"|format(results.final_bank) }}
-                            </h4>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="text-muted">Total Stake</h6>
-                            <h4 id="aTotalStake">£{{ "%.2f"|format(results.total_stake) }}</h4>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Daily Results -->
             <div class="card mb-4">
-                <div class="card-header bg-dark text-white section-header" id="dailyHeader" data-bs-toggle="collapse" data-bs-target="#dailyBody">
+                <div class="card-header bg-dark text-white section-header" data-bs-toggle="collapse" data-bs-target="#dailyBody">
                     <h5 class="mb-0 d-flex justify-content-between align-items-center">
                         <span>Daily Breakdown</span>
                         <i class="fas fa-chevron-down collapse-icon"></i>
@@ -338,11 +292,9 @@
                                         <th class="sortable" onclick="sortTable('dailyTable',1)">Bets <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('dailyTable',2)">Won <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('dailyTable',3)">Lost <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('dailyTable',4)">Start Bank <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('dailyTable',5)">Stake/Bet <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('dailyTable',6)">Staked <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('dailyTable',7)">P&amp;L <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('dailyTable',8)">End Bank <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',4)">Win% <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',5)">Staked <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('dailyTable',6)">P&amp;L <span class="sort-icon"></span></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -352,11 +304,9 @@
                                         <td>{{ day.bets }}</td>
                                         <td>{{ day.won }}</td>
                                         <td>{{ day.lost }}</td>
-                                        <td>£{{ "%.2f"|format(day.start_bank) }}</td>
-                                        <td>£{{ "%.2f"|format(day.stake_per_bet) }}</td>
+                                        <td>{{ "%.1f"|format(day.win_rate) }}%</td>
                                         <td>£{{ "%.2f"|format(day.staked) }}</td>
                                         <td class="{{ 'pnl-positive' if day.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(day.pnl) }}</td>
-                                        <td class="{{ 'pnl-positive' if day.end_bank > day.start_bank else ('pnl-negative' if day.end_bank < day.start_bank else '') }}">£{{ "%.2f"|format(day.end_bank) }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -368,9 +318,9 @@
 
             <!-- Weekly Results -->
             <div class="card mb-4">
-                <div class="card-header bg-secondary text-white section-header" id="weeklyHeader" data-bs-toggle="collapse" data-bs-target="#weeklyBody">
+                <div class="card-header bg-secondary text-white section-header" data-bs-toggle="collapse" data-bs-target="#weeklyBody">
                     <h5 class="mb-0 d-flex justify-content-between align-items-center">
-                        <span>Weekly Breakdown</span>
+                        <span>Weekly Breakdown <span class="badge bg-light text-dark ms-2" id="weeklyAvgWinRate" title="Average Win% across all weeks">Avg Win%: –</span></span>
                         <i class="fas fa-chevron-down collapse-icon"></i>
                     </h5>
                 </div>
@@ -384,10 +334,9 @@
                                         <th class="sortable" onclick="sortTable('weeklyTable',1)">Bets <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('weeklyTable',2)">Won <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('weeklyTable',3)">Lost <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('weeklyTable',4)">Start Bank <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('weeklyTable',4)">Win% <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('weeklyTable',5)">Staked <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('weeklyTable',6)">P&amp;L <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('weeklyTable',7)">End Bank <span class="sort-icon"></span></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -397,10 +346,9 @@
                                         <td>{{ week.bets }}</td>
                                         <td>{{ week.won }}</td>
                                         <td>{{ week.lost }}</td>
-                                        <td>£{{ "%.2f"|format(week.start_bank) }}</td>
+                                        <td>{{ "%.1f"|format(week.win_rate) }}%</td>
                                         <td>£{{ "%.2f"|format(week.staked) }}</td>
                                         <td class="{{ 'pnl-positive' if week.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(week.pnl) }}</td>
-                                        <td class="{{ 'pnl-positive' if week.end_bank > week.start_bank else ('pnl-negative' if week.end_bank < week.start_bank else '') }}">£{{ "%.2f"|format(week.end_bank) }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -412,7 +360,7 @@
 
             <!-- League Breakdown -->
             <div class="card mb-4">
-                <div class="card-header bg-primary text-white section-header" id="leagueHeader" data-bs-toggle="collapse" data-bs-target="#leagueBody">
+                <div class="card-header bg-success text-white section-header" data-bs-toggle="collapse" data-bs-target="#leagueBody">
                     <h5 class="mb-0 d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-globe me-2"></i>League Breakdown</span>
                         <i class="fas fa-chevron-down collapse-icon"></i>
@@ -429,7 +377,9 @@
                                         <th class="sortable" onclick="sortTable('leagueTable',2)">Won <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('leagueTable',3)">Lost <span class="sort-icon"></span></th>
                                         <th class="sortable" onclick="sortTable('leagueTable',4)">Win% <span class="sort-icon"></span></th>
-                                        <th class="sortable" onclick="sortTable('leagueTable',5)">P&amp;L <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',5)">Staked <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',6)">P&amp;L <span class="sort-icon"></span></th>
+                                        <th class="sortable" onclick="sortTable('leagueTable',7)">ROI% <span class="sort-icon"></span></th>
                                     </tr>
                                 </thead>
                                 <tbody id="leagueTableBody">
@@ -440,7 +390,9 @@
                                         <td>{{ row.won }}</td>
                                         <td>{{ row.lost }}</td>
                                         <td>{{ "%.1f"|format(row.win_rate) }}%</td>
+                                        <td>£{{ "%.2f"|format(row.stake) }}</td>
                                         <td class="{{ 'pnl-positive' if row.pnl > 0 else 'pnl-negative' }}">£{{ "%.2f"|format(row.pnl) }}</td>
+                                        <td class="{{ 'pnl-positive' if row.roi > 0 else 'pnl-negative' }}">{{ "%.2f"|format(row.roi) }}%</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -449,6 +401,7 @@
                     </div>
                 </div>
             </div>
+
             <!-- Breakdown Table -->
             <div class="card mb-4">
                 <div class="card-header bg-warning text-dark section-header" data-bs-toggle="collapse" data-bs-target="#breakdownBody">
@@ -512,7 +465,7 @@
             </div>
 
             {% else %}
-            <div class="alert alert-info">No results yet — run analysis from the Dashboard or use the panel above.</div>
+            <div class="alert alert-info">No football data available.</div>
             {% endif %}
         </div>
     </div>
@@ -520,10 +473,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script type="application/json" id="initialDailyData">{{ (results.daily_results if results else []) | tojson }}</script>
+<script type="application/json" id="initialWeeklyData">{{ (results.weekly_results if results else []) | tojson }}</script>
 <script>
     const DATA_DATE_MIN = '{{ date_min }}';
     const DATA_DATE_MAX = '{{ date_max }}';
     const INITIAL_DAILY = JSON.parse(document.getElementById('initialDailyData').textContent || '[]');
+    const INITIAL_WEEKLY = JSON.parse(document.getElementById('initialWeeklyData').textContent || '[]');
+    const INITIAL_WEEKLY_AVG = {{ (results.weekly_avg_win_rate | default(0) if results else 0) | tojson }};
 
     // ---- P&L Chart ----
     let _pnlChart = null;
@@ -663,12 +619,14 @@
 
     // ---- Table sorting ----
     var sortState = {};
-
     function sortTable(tableId, colIndex) {
         var table = document.getElementById(tableId);
         if (!table) return;
         var tbody = table.querySelector('tbody');
-        var rows = Array.from(tbody.querySelectorAll('tr'));
+        // Detail rows (expandable breakdown members) ride along with their group row.
+        var rows = Array.from(tbody.querySelectorAll('tr')).filter(function(r) {
+            return !r.classList.contains('bd-detail-row');
+        });
         var state = sortState[tableId] || {col: -1, asc: true};
         var asc = (state.col === colIndex) ? !state.asc : true;
         sortState[tableId] = {col: colIndex, asc: asc};
@@ -680,39 +638,79 @@
             if (!isNaN(aNum) && !isNaN(bNum)) return asc ? aNum - bNum : bNum - aNum;
             return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
         });
-        rows.forEach(function(r) { tbody.appendChild(r); });
+        rows.forEach(function(r) {
+            tbody.appendChild(r);
+            var did = r.getAttribute('data-bd-id');
+            if (did) {
+                var detail = tbody.querySelector('tr.bd-detail-row[data-bd-detail="' + did + '"]');
+                if (detail) tbody.appendChild(detail);
+            }
+        });
         table.querySelectorAll('th').forEach(function(th, i) {
             var icon = th.querySelector('.sort-icon');
             if (icon) icon.textContent = (i === colIndex) ? (asc ? ' ▲' : ' ▼') : '';
         });
     }
 
-    // ---- League helpers ----
+    // ---- Filter helpers ----
     function getSelectedLeagues() {
         return Array.from(document.querySelectorAll('.league-checkbox:checked')).map(cb => cb.value);
     }
     function selectAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = true); }
     function clearAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = false); }
 
-    // ---- Market helpers ----
     function getSelectedMarkets() {
         return Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
     }
     function selectAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = true); }
     function clearAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = false); }
 
-    // ---- Strategy helpers ----
-    function getSelectedStrategies() {
-        return Array.from(document.querySelectorAll('.strategy-checkbox:checked')).map(cb => cb.value);
+    // ---- Quick market toggle pills (drive the existing market checkboxes) ----
+    function activeMarketPills() {
+        return Array.from(document.querySelectorAll('.market-pill.active'))
+            .map(b => b.dataset.market).filter(m => m !== '__ALL__');
+    }
+    function refreshMarketPillStyles() {
+        var any = activeMarketPills().length > 0;
+        var allBtn = document.querySelector('.market-pill[data-market="__ALL__"]');
+        if (allBtn) allBtn.classList.toggle('active', !any);
+    }
+    function syncMarketCheckboxesFromPills() {
+        // No individual pill active => empty selection => backend treats as "all markets"
+        var active = activeMarketPills();
+        document.querySelectorAll('.market-checkbox').forEach(function(cb) {
+            cb.checked = active.length > 0 && active.indexOf(cb.value) !== -1;
+        });
+    }
+    function syncMarketPillsFromCheckboxes() {
+        // Keep pills consistent when the user edits the checkbox panel directly
+        var checked = Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
+        document.querySelectorAll('.market-pill').forEach(function(b) {
+            if (b.dataset.market === '__ALL__') return;
+            b.classList.toggle('active', checked.indexOf(b.dataset.market) !== -1);
+        });
+        refreshMarketPillStyles();
+    }
+    function toggleMarketPill(btn) {
+        btn.classList.toggle('active');
+        refreshMarketPillStyles();
+        syncMarketCheckboxesFromPills();
+        rerunAnalysis();
+    }
+    function selectAllMarketsPill() {
+        document.querySelectorAll('.market-pill').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.market === '__ALL__');
+        });
+        syncMarketCheckboxesFromPills();
+        rerunAnalysis();
     }
 
-    // ---- Source helpers ----n    function getSelectedSources() {
+    function getSelectedSources() {
         var all = document.querySelectorAll('.source-checkbox');
         var checked = Array.from(document.querySelectorAll('.source-checkbox:checked')).map(cb => cb.value);
         return checked.length === all.length ? [] : checked;
     }
 
-    // ---- Date helpers ----
     var SEASON_START = '2026-04-09';
     function resetDateRange() {
         document.getElementById('dateStartA').value = DATA_DATE_MIN;
@@ -728,85 +726,30 @@
         document.getElementById('timeRangeInputsA').style.display = all ? 'none' : 'block';
     }
 
-    // ---- League profitability badges ----
-    function updateLeagueBadges(leagueBreakdown) {
-        var map = {};
-        (leagueBreakdown || []).forEach(function(row) { map[row.league] = row; });
-        document.querySelectorAll('.league-pnl-badge').forEach(function(badge) {
-            var leagueName = badge.getAttribute('data-league');
-            var row = map[leagueName];
-            if (row) {
-                var pnl = row.pnl || 0;
-                badge.textContent = (pnl >= 0 ? '+' : '') + '£' + pnl.toFixed(2);
-                badge.className = 'badge league-pnl-badge ' + (pnl >= 0 ? 'bg-success' : 'bg-danger');
-            } else {
-                badge.textContent = '–';
-                badge.className = 'badge bg-secondary league-pnl-badge';
-            }
-        });
-    }
-
-    function loadLeagueProfitability() {
+    function buildFilterConfig() {
         var allTimes = document.getElementById('allTimesA').checked;
-        var config = {
+        return {
+            selected_leagues: getSelectedLeagues(),
+            selected_markets: getSelectedMarkets(),
+            selected_sources: getSelectedSources(),
             odds_min: parseFloat(document.getElementById('oddsMinA').value) || 1.0,
             odds_max: parseFloat(document.getElementById('oddsMaxA').value) || 100.0,
-            staking_strategy: document.getElementById('stakingStrategyA').value,
-            daily_bank: parseFloat(document.getElementById('dailyBankA').value) || 1000,
-            stake_percentage: parseFloat(document.getElementById('stakePercentageA').value) || 2,
-            base_stake: parseFloat(document.getElementById('baseStakeA').value) || 20,
-            flat_cap_stake: parseFloat(document.getElementById('flatCapStakeA').value) || 100,
             date_start: document.getElementById('dateStartA').value || null,
             date_end: document.getElementById('dateEndA').value || null,
             time_start: allTimes ? null : (document.getElementById('timeStartA').value || null),
             time_end: allTimes ? null : (document.getElementById('timeEndA').value || null),
-            commission: parseFloat(document.getElementById('commissionA').value) || 0,
-            selected_markets: getSelectedMarkets(),
-            selected_strategy_types: getSelectedStrategies(),
-            selected_sources: getSelectedSources(),
         };
-        fetch('/api/league-profitability', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(config)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) { updateLeagueBadges(data.league_breakdown); })
-        .catch(function(err) { console.error('League profitability load failed:', err); });
-    }
-
-    function onStrategyChange() {
-        var s = document.getElementById('stakingStrategyA').value;
-        document.getElementById('flatCapRow').style.display = (s === 'compound_then_flat') ? '' : 'none';
     }
 
     // ---- Re-run analysis ----
     function rerunAnalysis() {
-        var allTimes = document.getElementById('allTimesA').checked;
-        var config = {
-            selected_leagues: getSelectedLeagues(),
-            selected_markets: getSelectedMarkets(),
-            selected_strategy_types: getSelectedStrategies(),
-            selected_sources: getSelectedSources(),
-            odds_min: parseFloat(document.getElementById('oddsMinA').value) || 1.0,
-            odds_max: parseFloat(document.getElementById('oddsMaxA').value) || 100.0,
-            staking_strategy: document.getElementById('stakingStrategyA').value,
-            daily_bank: parseFloat(document.getElementById('dailyBankA').value) || 1000,
-            stake_percentage: parseFloat(document.getElementById('stakePercentageA').value) || 2,
-            base_stake: parseFloat(document.getElementById('baseStakeA').value) || 20,
-            flat_cap_stake: parseFloat(document.getElementById('flatCapStakeA').value) || 100,
-            date_start: document.getElementById('dateStartA').value || null,
-            date_end: document.getElementById('dateEndA').value || null,
-            time_start: allTimes ? null : (document.getElementById('timeStartA').value || null),
-            time_end: allTimes ? null : (document.getElementById('timeEndA').value || null),
-            commission: parseFloat(document.getElementById('commissionA').value) || 0,
-        };
-
+        syncMarketPillsFromCheckboxes();
+        var config = buildFilterConfig();
         var btn = document.getElementById('rerunBtn');
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Loading...';
 
-        fetch('/api/analyze', {
+        fetch('/api/analyze-real', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
@@ -814,15 +757,13 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Re-run Analysis';
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Apply Filters';
             if (data.error) { alert(data.error); return; }
 
             document.getElementById('aTotalBets').textContent = data.total_bets || 0;
             document.getElementById('aWon').textContent = data.won || 0;
             document.getElementById('aLost').textContent = data.lost || 0;
             document.getElementById('aWinRate').textContent = (data.win_rate || 0).toFixed(1) + '%';
-            document.getElementById('aStrategy').textContent = (data.strategy || '').replace(/^\w/, function(c) { return c.toUpperCase(); });
-            document.getElementById('aTotalStake').textContent = '£' + (data.total_stake || 0).toFixed(2);
 
             var pnlEl = document.getElementById('aTotalPnl');
             pnlEl.textContent = '£' + (data.total_pnl || 0).toFixed(2);
@@ -832,60 +773,13 @@
             roiEl.textContent = (data.roi || 0).toFixed(2) + '%';
             roiEl.className = (data.roi || 0) >= 0 ? 'pnl-positive' : 'pnl-negative';
 
-            var fbEl = document.getElementById('aFinalBank');
-            if (fbEl) {
-                fbEl.textContent = '£' + (data.final_bank || 0).toFixed(2);
-                fbEl.className = (data.final_bank || 0) >= config.daily_bank ? 'pnl-positive' : 'pnl-negative';
-            }
-
-            // Update P&L chart
             updatePnlChart(data.daily_results);
 
-            // Update league badges
-            if (data.league_breakdown) updateLeagueBadges(data.league_breakdown);
+            // Rebuild daily + weekly tables (expandable rows)
+            renderDailyTable(data.daily_results || []);
+            renderWeeklyTable(data.weekly_results || [], data.weekly_avg_win_rate);
 
-            // Rebuild daily table
-            var dailyTbody = document.querySelector('#dailyTable tbody');
-            if (dailyTbody) {
-                dailyTbody.innerHTML = (data.daily_results || []).map(function(day) {
-                    var endCls = day.end_bank > day.start_bank ? 'pnl-positive' : (day.end_bank < day.start_bank ? 'pnl-negative' : '');
-                    return '<tr>' +
-                        '<td>' + day.date + '</td>' +
-                        '<td>' + day.bets + '</td>' +
-                        '<td>' + day.won + '</td>' +
-                        '<td>' + day.lost + '</td>' +
-                        '<td>£' + (day.start_bank || 0).toFixed(2) + '</td>' +
-                        '<td>£' + (day.stake_per_bet || 0).toFixed(2) + '</td>' +
-                        '<td>£' + (day.staked || 0).toFixed(2) + '</td>' +
-                        '<td class="' + (day.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + day.pnl.toFixed(2) + '</td>' +
-                        '<td class="' + endCls + '">£' + (day.end_bank || 0).toFixed(2) + '</td>' +
-                        '</tr>';
-                }).join('');
-                sortState['dailyTable'] = {col: -1, asc: true};
-                document.querySelectorAll('#dailyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
-            }
-
-            // Rebuild weekly table
-            var weeklyTbody = document.querySelector('#weeklyTable tbody');
-            if (weeklyTbody) {
-                weeklyTbody.innerHTML = (data.weekly_results || []).map(function(wk) {
-                    var endCls = wk.end_bank > wk.start_bank ? 'pnl-positive' : (wk.end_bank < wk.start_bank ? 'pnl-negative' : '');
-                    return '<tr>' +
-                        '<td>' + wk.week + '</td>' +
-                        '<td>' + wk.bets + '</td>' +
-                        '<td>' + wk.won + '</td>' +
-                        '<td>' + wk.lost + '</td>' +
-                        '<td>£' + (wk.start_bank || 0).toFixed(2) + '</td>' +
-                        '<td>£' + (wk.staked || 0).toFixed(2) + '</td>' +
-                        '<td class="' + (wk.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + wk.pnl.toFixed(2) + '</td>' +
-                        '<td class="' + endCls + '">£' + (wk.end_bank || 0).toFixed(2) + '</td>' +
-                        '</tr>';
-                }).join('');
-                sortState['weeklyTable'] = {col: -1, asc: true};
-                document.querySelectorAll('#weeklyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
-            }
-
-            // Rebuild league breakdown table
+            // Rebuild league table
             var leagueTbody = document.getElementById('leagueTableBody');
             if (leagueTbody) {
                 leagueTbody.innerHTML = (data.league_breakdown || []).map(function(row) {
@@ -895,7 +789,9 @@
                         '<td>' + row.won + '</td>' +
                         '<td>' + row.lost + '</td>' +
                         '<td>' + row.win_rate.toFixed(1) + '%</td>' +
+                        '<td>£' + (row.stake || 0).toFixed(2) + '</td>' +
                         '<td class="' + (row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative') + '">£' + row.pnl.toFixed(2) + '</td>' +
+                        '<td class="' + (row.roi >= 0 ? 'pnl-positive' : 'pnl-negative') + '">' + row.roi.toFixed(2) + '%</td>' +
                         '</tr>';
                 }).join('');
                 sortState['leagueTable'] = {col: -1, asc: true};
@@ -904,9 +800,9 @@
         })
         .catch(function(err) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Re-run Analysis';
+            btn.innerHTML = '<i class="fas fa-sync me-2"></i> Apply Filters';
             console.error(err);
-            alert('Analysis failed. Check console.');
+            alert('Failed to load data. Check console.');
         });
     }
 
@@ -921,35 +817,107 @@
         document.getElementById('bdGroup3Col').style.display = v ? 'block' : 'none';
     }
 
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function scoreCell(m) {
+        var st = m.correct_score_status || '';
+        if (st === 'exact' && m.correct_score) {
+            return '<span class="bd-score-exact">' + escapeHtml(m.correct_score) + '</span>';
+        }
+        if (st === 'bucket' && m.correct_score) {
+            return '<span class="bd-score-bucket" title="Catch-all bucket — exact score not quoted">' +
+                escapeHtml(m.correct_score) + '</span>';
+        }
+        return '<span class="bd-score-none">—</span>';
+    }
+
+    function buildMembersTable(members) {
+        if (!members.length) return '<div class="text-muted small p-2">No individual bets.</div>';
+        var head = '<thead><tr>' +
+            '<th>Date</th><th>Match</th><th>League</th><th>Bet Type</th><th>Odds</th>' +
+            '<th>Score</th><th>Result</th><th>P&amp;L</th></tr></thead>';
+        var body = members.map(function(m) {
+            var pnlCls = m.pnl > 0 ? 'pnl-positive' : (m.pnl < 0 ? 'pnl-negative' : '');
+            return '<tr>' +
+                '<td>' + escapeHtml(m.date) + '</td>' +
+                '<td>' + escapeHtml(m.match) + '</td>' +
+                '<td>' + escapeHtml(m.league || '') + '</td>' +
+                '<td>' + escapeHtml(m.bet_type) + '</td>' +
+                '<td>' + (m.odds ? m.odds.toFixed(2) : '—') + '</td>' +
+                '<td>' + scoreCell(m) + '</td>' +
+                '<td>' + escapeHtml(m.result) + '</td>' +
+                '<td class="' + pnlCls + '">£' + (m.pnl || 0).toFixed(2) + '</td>' +
+                '</tr>';
+        }).join('');
+        return '<table class="table table-sm table-striped bd-detail-table">' + head +
+            '<tbody>' + body + '</tbody></table>';
+    }
+
+    // ---- Expandable daily / weekly rows (reuse the bd-group/detail machinery) ----
+    function buildPeriodRows(rows, gidPrefix, labelKey) {
+        return (rows || []).map(function(row, idx) {
+            var gid = gidPrefix + idx;
+            var pnlCls = row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            var group = '<tr class="bd-group-row" data-bd-id="' + gid + '" onclick="toggleBdGroup(\'' + gid + '\')">' +
+                '<td><span class="bd-caret">▶</span> ' + escapeHtml(row[labelKey]) + '</td>' +
+                '<td>' + row.bets + '</td>' +
+                '<td>' + row.won + '</td>' +
+                '<td>' + row.lost + '</td>' +
+                '<td>' + (row.win_rate || 0).toFixed(1) + '%</td>' +
+                '<td>£' + (row.staked || 0).toFixed(2) + '</td>' +
+                '<td class="' + pnlCls + '">£' + row.pnl.toFixed(2) + '</td></tr>';
+            var detail = '<tr class="bd-detail-row" data-bd-detail="' + gid + '" style="display:none;">' +
+                '<td class="bd-detail-cell" colspan="7">' + buildMembersTable(row.members || []) + '</td></tr>';
+            return group + detail;
+        }).join('');
+    }
+
+    function renderDailyTable(dailyResults) {
+        var tb = document.querySelector('#dailyTable tbody');
+        if (!tb) return;
+        tb.innerHTML = buildPeriodRows(dailyResults, 'dy', 'date');
+        sortState['dailyTable'] = {col: -1, asc: true};
+        document.querySelectorAll('#dailyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
+    }
+
+    function renderWeeklyTable(weeklyResults, avgWinRate) {
+        var tb = document.querySelector('#weeklyTable tbody');
+        if (tb) {
+            tb.innerHTML = buildPeriodRows(weeklyResults, 'wk', 'week');
+            sortState['weeklyTable'] = {col: -1, asc: true};
+            document.querySelectorAll('#weeklyTable th .sort-icon').forEach(function(el) { el.textContent = ''; });
+        }
+        var badge = document.getElementById('weeklyAvgWinRate');
+        if (badge && avgWinRate != null) badge.textContent = 'Avg Win%: ' + avgWinRate.toFixed(1) + '%';
+    }
+
+    function toggleBdGroup(gid) {
+        var groupRow = document.querySelector('tr.bd-group-row[data-bd-id="' + gid + '"]');
+        var detail = document.querySelector('tr.bd-detail-row[data-bd-detail="' + gid + '"]');
+        if (!detail) return;
+        var open = detail.style.display !== 'none';
+        detail.style.display = open ? 'none' : '';
+        if (groupRow) groupRow.classList.toggle('open', !open);
+    }
+
     function runBreakdown() {
-        var allTimes = document.getElementById('allTimesA').checked;
         var groupBy = [document.getElementById('bdGroupBy1').value];
         var g2 = document.getElementById('bdGroupBy2').value;
         var g3 = document.getElementById('bdGroupBy3').value;
         if (g2) groupBy.push(g2);
         if (g3) groupBy.push(g3);
 
-        var config = {
-            group_by: groupBy,
-            selected_leagues: getSelectedLeagues(),
-            selected_markets: getSelectedMarkets(),
-            selected_strategy_types: getSelectedStrategies(),
-            selected_sources: getSelectedSources(),
-            odds_min: parseFloat(document.getElementById('oddsMinA').value) || 1.0,
-            odds_max: parseFloat(document.getElementById('oddsMaxA').value) || 100.0,
-            base_stake: parseFloat(document.getElementById('baseStakeA').value) || 20,
-            date_start: document.getElementById('dateStartA').value || null,
-            date_end: document.getElementById('dateEndA').value || null,
-            time_start: allTimes ? null : (document.getElementById('timeStartA').value || null),
-            time_end: allTimes ? null : (document.getElementById('timeEndA').value || null),
-            commission: parseFloat(document.getElementById('commissionA').value) || 0,
-        };
+        var config = Object.assign({group_by: groupBy}, buildFilterConfig());
 
         var btn = document.getElementById('bdRunBtn');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Running...';
 
-        fetch('/api/analyze/breakdown', {
+        fetch('/api/analyze-real/breakdown', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
@@ -975,28 +943,28 @@
                 month: 'Month', day_of_week: 'Day of Week'
             };
             var dims = data.group_by || [];
-            var statCols = [
-                {label: 'Bets'}, {label: 'Won'}, {label: 'Lost'},
-                {label: 'Win%'}, {label: 'Staked'}, {label: 'P&amp;L'}, {label: 'ROI%'}
-            ];
+            var statCols = ['Bets', 'Won', 'Lost', 'Win%', 'Staked', 'P&amp;L', 'ROI%'];
 
-            // Build header row
             var thCells = dims.map(function(d, i) {
                 return '<th class="sortable" onclick="sortTable(\'bdTable\',' + i + ')">' +
                     (DIM_LABELS[d] || d) + ' <span class="sort-icon"></span></th>';
             });
             statCols.forEach(function(col, i) {
                 thCells.push('<th class="sortable" onclick="sortTable(\'bdTable\',' + (dims.length + i) + ')">' +
-                    col.label + ' <span class="sort-icon"></span></th>');
+                    col + ' <span class="sort-icon"></span></th>');
             });
             thead.innerHTML = '<tr>' + thCells.join('') + '</tr>';
 
-            // Build body rows
-            tbody.innerHTML = data.rows.map(function(row) {
+            var totalCols = dims.length + statCols.length;
+            tbody.innerHTML = data.rows.map(function(row, idx) {
                 var pnlCls = row.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
                 var roiCls = row.roi >= 0 ? 'pnl-positive' : 'pnl-negative';
-                var dimCells = (row.dims || []).map(function(v) { return '<td>' + v + '</td>'; }).join('');
-                return '<tr>' + dimCells +
+                var gid = 'bd' + idx;
+                var dimCells = (row.dims || []).map(function(v, di) {
+                    var caret = di === 0 ? '<span class="bd-caret">▶</span> ' : '';
+                    return '<td>' + caret + escapeHtml(v) + '</td>';
+                }).join('');
+                var groupRow = '<tr class="bd-group-row" data-bd-id="' + gid + '" onclick="toggleBdGroup(\'' + gid + '\')">' + dimCells +
                     '<td>' + row.bets + '</td>' +
                     '<td>' + row.won + '</td>' +
                     '<td>' + row.lost + '</td>' +
@@ -1005,6 +973,10 @@
                     '<td class="' + pnlCls + '">£' + row.pnl.toFixed(2) + '</td>' +
                     '<td class="' + roiCls + '">' + row.roi.toFixed(2) + '%</td>' +
                     '</tr>';
+                var detailRow = '<tr class="bd-detail-row" data-bd-detail="' + gid + '" style="display:none;">' +
+                    '<td class="bd-detail-cell" colspan="' + totalCols + '">' +
+                    buildMembersTable(row.members || []) + '</td></tr>';
+                return groupRow + detailRow;
             }).join('');
             sortState['bdTable'] = {col: -1, asc: true};
         })
@@ -1015,14 +987,13 @@
         });
     }
 
-    // Auto-load league profitability + chart on page load
     document.addEventListener('DOMContentLoaded', function() {
-        if (document.querySelectorAll('.league-checkbox').length > 0) {
-            loadLeagueProfitability();
-        }
+        syncMarketPillsFromCheckboxes();
         if (INITIAL_DAILY.length > 0) {
             updatePnlChart(INITIAL_DAILY);
         }
+        renderDailyTable(INITIAL_DAILY);
+        renderWeeklyTable(INITIAL_WEEKLY, INITIAL_WEEKLY_AVG);
     });
 </script>
 </body>

@@ -1,0 +1,11 @@
+{
+    "python.defaultInterpreterPath": "~/.bet_scenario_tool_venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "chat.tools.terminal.autoApprove": {
+        "/^python -c \"from betfairlightweight import APIClient; help\\(APIClient\\.__init__\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

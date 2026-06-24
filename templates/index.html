@@ -6,6 +6,7 @@
     <title>Bet Scenario Tool - Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <style>
         body { background-color: #f8f9fa; }
         .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
@@ -15,7 +16,10 @@
         .pnl-positive { color: #28a745; font-weight: bold; }
         .pnl-negative { color: #dc3545; font-weight: bold; }
         .results-table { font-size: 0.9rem; }
-        .league-check-group { max-height: 180px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; background: #fff; }
+        .league-check-group { max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; }
+        .league-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #f5f5f5; }
+        .league-row:last-child { border-bottom: none; }
+        .league-pnl-badge { font-size: 0.65em; min-width: 52px; text-align: center; }
     </style>
 </head>
 <body>
@@ -25,7 +29,12 @@
             <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
             <a href="/" class="active"><i class="fas fa-home me-2"></i> Dashboard</a>
             <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
-            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analysis</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+            <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+            <a href="/strategies"><i class="fas fa-flask me-2"></i> Strategies</a>
+            <a href="/horses"><i class="fas fa-horse me-2"></i> Horse Racing</a>
+            <a href="/today"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
+            <a href="/place-bets"><i class="fas fa-ticket-alt me-2"></i> Place Bets</a>
             <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
         </div>
 
@@ -37,30 +46,45 @@
 
             <!-- Configuration Panel -->
             <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-sliders me-2"></i> Analysis Configuration</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="sportMode" id="modeFb" value="football" checked onchange="setSport('football')">
+                        <label class="btn btn-outline-light" for="modeFb"><i class="fas fa-futbol me-1"></i> Football</label>
+                        <input type="radio" class="btn-check" name="sportMode" id="modeHr" value="horses" onchange="setSport('horses')">
+                        <label class="btn btn-outline-light" for="modeHr"><i class="fas fa-horse me-1"></i> Horse Racing</label>
+                    </div>
                 </div>
                 <div class="card-body">
+
+                    <!-- ===== FOOTBALL CONFIG ===== -->
+                    <div id="footballConfig">
                     <div class="row">
                         <!-- League Selection -->
                         <div class="col-md-3 mb-3">
                             <label class="form-label"><strong>Select Leagues</strong></label>
-                            <div class="mb-1">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllLeagues()">All</button>
+                            <div class="mb-1 d-flex gap-1 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllLeagues()">All</button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllLeagues()">None</button>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="loadLeagueProfitability()" title="Show P&amp;L per league with current settings">
+                                    <i class="fas fa-chart-pie me-1"></i>Stats
+                                </button>
                             </div>
                             <div class="league-check-group" id="leagueContainer">
                                 {% for league in leagues %}
-                                <div class="form-check">
-                                    <input class="form-check-input league-checkbox" type="checkbox"
-                                           value="{{ league.label }}" id="lg_{{ loop.index }}">
-                                    <label class="form-check-label small" for="lg_{{ loop.index }}">
-                                        {{ league.label }}
-                                    </label>
+                                <div class="league-row">
+                                    <div class="form-check mb-0 flex-grow-1">
+                                        <input class="form-check-input league-checkbox" type="checkbox"
+                                               value="{{ league.label }}" id="lg_{{ loop.index }}">
+                                        <label class="form-check-label small" for="lg_{{ loop.index }}">
+                                            {{ league.label }}
+                                        </label>
+                                    </div>
+                                    <span class="badge bg-secondary league-pnl-badge" data-league="{{ league.label }}">–</span>
                                 </div>
                                 {% endfor %}
                                 {% if not leagues %}
-                                <div class="text-muted small p-1">No leagues detected. Load data first.</div>
+                                <div class="text-muted small p-2">No leagues detected. Load data first.</div>
                                 {% endif %}
                             </div>
                             <small class="text-muted">Leave all unchecked = all leagues</small>
@@ -75,36 +99,52 @@
                             </div>
                             <div class="league-check-group" id="marketContainer">
                                 {% for market in markets %}
-                                <div class="form-check">
+                                <div class="form-check p-2 mb-0">
                                     <input class="form-check-input market-checkbox" type="checkbox"
                                            value="{{ market }}" id="mkt_{{ loop.index }}">
                                     <label class="form-check-label small" for="mkt_{{ loop.index }}">{{ market }}</label>
                                 </div>
                                 {% endfor %}
                                 {% if not markets %}
-                                <div class="text-muted small p-1">No markets detected. Load data first.</div>
+                                <div class="text-muted small p-2">No markets detected. Load data first.</div>
                                 {% endif %}
                             </div>
                             <small class="text-muted">Leave all unchecked = all markets</small>
+
+                            <label class="form-label mt-3"><strong>Source</strong></label>
+                            <div class="border rounded p-2 bg-white">
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input source-checkbox" type="checkbox" value="csv" id="src_csv" checked>
+                                    <label class="form-check-label small" for="src_csv"><i class="fas fa-file-csv me-1 text-secondary"></i>CSV</label>
+                                </div>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input source-checkbox" type="checkbox" value="pdf" id="src_pdf" checked>
+                                    <label class="form-check-label small" for="src_pdf"><i class="fas fa-file-pdf me-1 text-warning"></i>PDF</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input source-checkbox" type="checkbox" value="betfair" id="src_bf" checked>
+                                    <label class="form-check-label small" for="src_bf"><i class="fas fa-exchange-alt me-1 text-primary"></i>Betfair</label>
+                                </div>
+                            </div>
+                            <small class="text-muted">Leave all checked = all sources</small>
                         </div>
 
                         <!-- Date Range -->
                         <div class="col-md-2 mb-3">
                             <label class="form-label"><strong>Date Range</strong></label>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="allDates" checked onchange="toggleDateRange()">
-                                <label class="form-check-label" for="allDates"><strong>All dates</strong></label>
+                            <div class="mb-2">
+                                <label class="small text-muted">From</label>
+                                <input type="date" class="form-control form-control-sm" id="dateStart"
+                                       value="{{ config.date_start or date_min }}">
                             </div>
-                            <div id="dateRangeInputs" style="display:none;">
-                                <div class="mb-2">
-                                    <label class="small text-muted">From</label>
-                                    <input type="date" class="form-control form-control-sm" id="dateStart" value="{{ config.date_start or date_min }}">
-                                </div>
-                                <div>
-                                    <label class="small text-muted">To</label>
-                                    <input type="date" class="form-control form-control-sm" id="dateEnd" value="{{ config.date_end or date_max }}">
-                                </div>
+                            <div class="mb-2">
+                                <label class="small text-muted">To</label>
+                                <input type="date" class="form-control form-control-sm" id="dateEnd"
+                                       value="{{ config.date_end or date_max }}">
                             </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="resetDateRange()">
+                                <i class="fas fa-undo me-1"></i> All Dates
+                            </button>
                         </div>
 
                         <!-- Time Range -->
@@ -166,6 +206,116 @@
                             </a>
                         </div>
                     </div>
+                    </div><!-- end #footballConfig -->
+
+                    <!-- ===== HORSE RACING CONFIG ===== -->
+                    <div id="horsesConfig" style="display:none;">
+                    <div class="row">
+
+                        <!-- Track Selection -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Tracks</strong></label>
+                            <div class="mb-1 d-flex gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="hrSelectAllTracks()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hrClearAllTracks()">None</button>
+                            </div>
+                            <div class="league-check-group" id="hrTrackContainer">
+                                {% for track in hr_tracks %}
+                                <div class="league-row">
+                                    <div class="form-check mb-0 flex-grow-1">
+                                        <input class="form-check-input hr-track-checkbox" type="checkbox"
+                                               value="{{ track.label }}" id="htr_{{ loop.index }}">
+                                        <label class="form-check-label small" for="htr_{{ loop.index }}">{{ track.label }}</label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                                {% if not hr_tracks %}
+                                <div class="text-muted small p-2">No tracks detected yet.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all tracks</small>
+                        </div>
+
+                        <!-- Market / Selection -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Horses / Bet Types</strong></label>
+                            <div class="mb-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="hrSelectAllMarkets()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hrClearAllMarkets()">None</button>
+                            </div>
+                            <div class="league-check-group" id="hrMarketContainer">
+                                {% for market in hr_markets %}
+                                <div class="form-check p-2 mb-0">
+                                    <input class="form-check-input hr-market-checkbox" type="checkbox"
+                                           value="{{ market }}" id="hmkt_{{ loop.index }}">
+                                    <label class="form-check-label small" for="hmkt_{{ loop.index }}">{{ market }}</label>
+                                </div>
+                                {% endfor %}
+                                {% if not hr_markets %}
+                                <div class="text-muted small p-2">No selections detected yet.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all selections</small>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Date Range</strong></label>
+                            <div class="mb-2">
+                                <label class="small text-muted">From</label>
+                                <input type="date" class="form-control form-control-sm" id="hrDateStart" value="{{ hr_date_min }}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="small text-muted">To</label>
+                                <input type="date" class="form-control form-control-sm" id="hrDateEnd" value="{{ hr_date_max }}">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="hrResetDates()">
+                                <i class="fas fa-undo me-1"></i> All Dates
+                            </button>
+                        </div>
+
+                        <!-- Staking (flat only) -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Staking</strong></label>
+                            <div class="mb-1 px-2 py-1 rounded bg-light border text-muted small">
+                                <i class="fas fa-lock me-1"></i> Flat Stake
+                            </div>
+                            <label class="small text-muted mt-2">Base Stake (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="hrBaseStake" value="{{ config.base_stake or 10 }}">
+                            <label class="small text-muted">Starting Bank (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="hrStartingBank" value="{{ config.daily_bank or 100 }}">
+                            <label class="small text-muted">Commission %</label>
+                            <input type="number" class="form-control form-control-sm" id="hrCommission" value="{{ config.commission or 0 }}" min="0" max="100" step="0.1">
+                        </div>
+
+                        <!-- Odds Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Odds Range</strong></label>
+                            <div class="mb-2">
+                                <label class="small text-muted">Min</label>
+                                <input type="number" class="form-control form-control-sm" id="hrOddsMin" value="1.0" step="0.1" min="1">
+                            </div>
+                            <div>
+                                <label class="small text-muted">Max</label>
+                                <input type="number" class="form-control form-control-sm" id="hrOddsMax" value="1000" step="0.1">
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-2">
+                            <button class="btn btn-success w-100" onclick="runAnalysis()" id="hrRunBtn">
+                                <i class="fas fa-play me-2"></i> Run Analysis
+                            </button>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <a href="/horses" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-horse me-2"></i> Full Horse Racing
+                            </a>
+                        </div>
+                    </div>
+                    </div><!-- end #horsesConfig -->
+
                 </div>
             </div>
 
@@ -205,6 +355,21 @@
                 </div>
             </div>
 
+            <!-- P&L Over Time Chart -->
+            <div class="card mb-4" id="pnlChartCard" style="display:none;">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i> Cumulative P&amp;L Over Time</h6>
+                    <span class="badge bg-secondary" id="chartSummaryBadge"></span>
+                </div>
+                <div class="card-body p-2" style="height:260px;">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+                <div class="card-footer py-1 text-center" id="pnlInfo"
+                     style="font-size:0.82rem; min-height:28px; color:#555; background:#f8f9fa;">
+                    <span class="text-muted">Hover or click a point for details</span>
+                </div>
+            </div>
+
             <!-- Import Data -->
             <div class="card mb-4">
                 <div class="card-header bg-secondary text-white">
@@ -213,19 +378,22 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6>Upload CSV</h6>
+                            <h6>Upload CSV or PDF</h6>
                             <form id="uploadForm" enctype="multipart/form-data">
                                 <div class="input-group">
-                                    <input type="file" class="form-control" name="file" accept=".csv">
+                                    <input type="file" class="form-control" name="file" accept=".csv,.pdf">
                                     <button type="submit" class="btn btn-primary">Upload</button>
                                 </div>
+                                <small class="text-muted">CSV: bet history export &nbsp;|&nbsp; PDF: BetsoccerPro results (auto-deduplicates)</small>
                             </form>
+                            <div id="uploadStatus" class="mt-2 small"></div>
                         </div>
                         <div class="col-md-6">
-                            <h6>PDF History</h6>
+                            <h6>PDF in App Folder</h6>
                             <button class="btn btn-warning" onclick="processPDF()" id="pdfBtn">
-                                <i class="fas fa-file-pdf me-2"></i> Import from PDF
+                                <i class="fas fa-file-pdf me-2"></i> Import from PDF (folder)
                             </button>
+                            <div class="mt-1"><small class="text-muted">Loads "BetsoccerPro Results April.pdf" from app folder</small></div>
                             <div id="pdfStatus" class="mt-2 small"></div>
                         </div>
                     </div>
@@ -240,11 +408,12 @@
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-striped results-table mb-0">
-                            <thead class="table-dark">
+                            <thead class="table-dark" id="resultsHead">
                                 <tr><th>Date</th><th>Bets</th><th>W / L</th><th>P&L</th></tr>
                             </thead>
                             <tbody id="resultsTable"></tbody>
                         </table>
+
                     </div>
                 </div>
             </div>
@@ -254,21 +423,192 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    const DATA_DATE_MIN = '{{ date_min }}';
+    const DATA_DATE_MAX = '{{ date_max }}';
+    const HR_DATE_MIN   = '{{ hr_date_min }}';
+    const HR_DATE_MAX   = '{{ hr_date_max }}';
+
+    let currentSport = 'football';
+
+    function setSport(sport) {
+        currentSport = sport;
+        document.getElementById('footballConfig').style.display = sport === 'football' ? '' : 'none';
+        document.getElementById('horsesConfig').style.display   = sport === 'horses'   ? '' : 'none';
+        // Clear results when switching sport
+        document.getElementById('totalBets').textContent = '–';
+        document.getElementById('winRate').textContent   = '–';
+        document.getElementById('totalPnL').textContent  = '–';
+        document.getElementById('roi').textContent       = '–';
+        document.getElementById('resultsCard').style.display  = 'none';
+        document.getElementById('pnlChartCard').style.display = 'none';
+    }
+
+    // ---- HR helpers ----
+    function hrGetSelectedTracks()  { return Array.from(document.querySelectorAll('.hr-track-checkbox:checked')).map(cb => cb.value); }
+    function hrSelectAllTracks()    { document.querySelectorAll('.hr-track-checkbox').forEach(cb => cb.checked = true); }
+    function hrClearAllTracks()     { document.querySelectorAll('.hr-track-checkbox').forEach(cb => cb.checked = false); }
+    function hrGetSelectedMarkets() { return Array.from(document.querySelectorAll('.hr-market-checkbox:checked')).map(cb => cb.value); }
+    function hrSelectAllMarkets()   { document.querySelectorAll('.hr-market-checkbox').forEach(cb => cb.checked = true); }
+    function hrClearAllMarkets()    { document.querySelectorAll('.hr-market-checkbox').forEach(cb => cb.checked = false); }
+    function hrResetDates() {
+        document.getElementById('hrDateStart').value = HR_DATE_MIN;
+        document.getElementById('hrDateEnd').value   = HR_DATE_MAX;
+    }
+
+    // ---- P&L Chart ----
+    let _pnlChart = null;
+    let _pnlPinned = false;
+
+    // Draws a vertical crosshair at the active tooltip position
+    const _crosshairPlugin = {
+        id: 'crosshair',
+        afterDraw: function(chart) {
+            if (!chart.tooltip._active || !chart.tooltip._active.length) return;
+            const ctx = chart.ctx;
+            const x = chart.tooltip._active[0].element.x;
+            const {top, bottom} = chart.scales.y;
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, bottom);
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    function updatePnlChart(dailyResults) {
+        const card = document.getElementById('pnlChartCard');
+        const canvas = document.getElementById('pnlChart');
+        if (!canvas || !dailyResults || dailyResults.length === 0) return;
+
+        let cum = 0;
+        const labels = [], cumData = [], dailyData = [];
+        dailyResults.forEach(function(day) {
+            const d = parseFloat((day.pnl || 0).toFixed(2));
+            cum = parseFloat((cum + d).toFixed(2));
+            labels.push(day.date);
+            cumData.push(cum);
+            dailyData.push(d);
+        });
+
+        const finalPnl = cumData[cumData.length - 1] || 0;
+        const badge = document.getElementById('chartSummaryBadge');
+        if (badge) {
+            badge.textContent = (finalPnl >= 0 ? '+' : '') + '£' + finalPnl.toFixed(2);
+            badge.className = 'badge ' + (finalPnl >= 0 ? 'bg-success' : 'bg-danger');
+        }
+        card.style.display = 'block';
+
+        function fmt(v) { return (v >= 0 ? '+' : '') + '£' + v.toFixed(2); }
+        function col(v) { return v >= 0 ? '#28a745' : '#dc3545'; }
+
+        function showInfo(idx, pin) {
+            const el = document.getElementById('pnlInfo');
+            if (!el || idx < 0 || idx >= labels.length) return;
+            const c = cumData[idx], d = dailyData[idx];
+            el.innerHTML =
+                '<strong>' + labels[idx] + '</strong>' +
+                ' &nbsp;&middot;&nbsp; Daily: <strong style="color:' + col(d) + '">' + fmt(d) + '</strong>' +
+                ' &nbsp;&middot;&nbsp; Cumulative: <strong style="color:' + col(c) + '">' + fmt(c) + '</strong>' +
+                (pin ? ' &nbsp;<span title="Pinned – click again to unpin" style="color:#0d6efd;cursor:pointer">&#128204;</span>' : '');
+        }
+
+        // Destroy & recreate so closures always reference current data arrays
+        if (_pnlChart) { _pnlChart.destroy(); _pnlChart = null; }
+
+        _pnlChart = new Chart(canvas, {
+            type: 'line',
+            plugins: [_crosshairPlugin],
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: cumData,
+                    dailyData: dailyData,
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    hoverRadius: 8,
+                    pointBackgroundColor: function(ctx) {
+                        return (ctx.parsed && ctx.parsed.y >= 0) ? '#28a745' : '#dc3545';
+                    },
+                    tension: 0.3,
+                    fill: false,
+                    segment: {
+                        borderColor: function(ctx) {
+                            return ctx.p0.parsed.y >= 0 ? '#28a745' : '#dc3545';
+                        }
+                    },
+                    borderColor: '#28a745',
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                onHover: function(e, elements) {
+                    if (_pnlPinned || !elements.length) return;
+                    showInfo(elements[0].index, false);
+                },
+                onClick: function(e, elements) {
+                    if (!elements.length) { _pnlPinned = false; return; }
+                    _pnlPinned = !_pnlPinned;
+                    showInfo(elements[0].index, _pnlPinned);
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        displayColors: false,
+                        callbacks: {
+                            title: function(items) { return items[0].label; },
+                            label: function(ctx) {
+                                const d = ctx.dataset.dailyData[ctx.dataIndex];
+                                const c = ctx.parsed.y;
+                                return ['Daily:       ' + fmt(d), 'Cumulative: ' + fmt(c)];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: { callback: function(v) { return '£' + v.toFixed(0); } },
+                        grid: {
+                            color: function(ctx) { return ctx.tick.value === 0 ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.05)'; },
+                            lineWidth: function(ctx) { return ctx.tick.value === 0 ? 1.5 : 1; }
+                        }
+                    },
+                    x: { ticks: { maxTicksLimit: 10, maxRotation: 45 } }
+                }
+            }
+        });
+    }
+
+    // ---- League helpers ----
     function getSelectedLeagues() {
         return Array.from(document.querySelectorAll('.league-checkbox:checked')).map(cb => cb.value);
     }
     function selectAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = true); }
     function clearAllLeagues() { document.querySelectorAll('.league-checkbox').forEach(cb => cb.checked = false); }
 
+    // ---- Market helpers ----
     function getSelectedMarkets() {
         return Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
     }
     function selectAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = true); }
     function clearAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = false); }
 
-    function toggleDateRange() {
-        const all = document.getElementById('allDates').checked;
-        document.getElementById('dateRangeInputs').style.display = all ? 'none' : 'block';
+    // ---- Source helpers ----
+    function getSelectedSources() {
+        const all = document.querySelectorAll('.source-checkbox');
+        const checked = Array.from(document.querySelectorAll('.source-checkbox:checked')).map(cb => cb.value);
+        return checked.length === all.length ? [] : checked;
+    }
+
+    // ---- Date helpers ----
+    function resetDateRange() {
+        document.getElementById('dateStart').value = DATA_DATE_MIN;
+        document.getElementById('dateEnd').value = DATA_DATE_MAX;
     }
 
     function toggleTimeRange() {
@@ -276,20 +616,69 @@
         document.getElementById('timeRangeInputs').style.display = all ? 'none' : 'block';
     }
 
-    function runAnalysis() {
-        const allDates = document.getElementById('allDates').checked;
+    // ---- League profitability badges ----
+    function updateLeagueBadges(leagueBreakdown) {
+        const map = {};
+        (leagueBreakdown || []).forEach(function(row) { map[row.league] = row; });
+        document.querySelectorAll('.league-pnl-badge').forEach(function(badge) {
+            const leagueName = badge.getAttribute('data-league');
+            const row = map[leagueName];
+            if (row) {
+                const pnl = row.pnl || 0;
+                badge.textContent = (pnl >= 0 ? '+' : '') + '£' + pnl.toFixed(2);
+                badge.className = 'badge league-pnl-badge ' + (pnl >= 0 ? 'bg-success' : 'bg-danger');
+            } else {
+                badge.textContent = '–';
+                badge.className = 'badge bg-secondary league-pnl-badge';
+            }
+        });
+    }
+
+    function loadLeagueProfitability() {
         const allTimes = document.getElementById('allTimes').checked;
         const config = {
-            selected_leagues: getSelectedLeagues(),
-            selected_markets: getSelectedMarkets(),
             odds_min: parseFloat(document.getElementById('oddsMin').value) || 1.0,
             odds_max: parseFloat(document.getElementById('oddsMax').value) || 100.0,
             staking_strategy: document.getElementById('stakingStrategy').value,
             daily_bank: parseFloat(document.getElementById('dailyBank').value) || 1000,
             stake_percentage: parseFloat(document.getElementById('stakePercentage').value) || 2,
             base_stake: parseFloat(document.getElementById('baseStake').value) || 20,
-            date_start: allDates ? null : (document.getElementById('dateStart').value || null),
-            date_end: allDates ? null : (document.getElementById('dateEnd').value || null),
+            date_start: document.getElementById('dateStart').value || null,
+            date_end: document.getElementById('dateEnd').value || null,
+            time_start: allTimes ? null : (document.getElementById('timeStart').value || null),
+            time_end: allTimes ? null : (document.getElementById('timeEnd').value || null),
+            commission: parseFloat(document.getElementById('commission').value) || 0,
+            selected_markets: getSelectedMarkets(),
+            selected_sources: getSelectedSources(),
+        };
+
+        fetch('/api/league-profitability', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(r => r.json())
+        .then(data => updateLeagueBadges(data.league_breakdown))
+        .catch(err => console.error('League profitability load failed:', err));
+    }
+
+    // ---- Main analysis ----
+    function runAnalysis() {
+        if (currentSport === 'horses') { runHorsesAnalysis(); return; }
+
+        const allTimes = document.getElementById('allTimes').checked;
+        const config = {
+            selected_leagues: getSelectedLeagues(),
+            selected_markets: getSelectedMarkets(),
+            selected_sources: getSelectedSources(),
+            odds_min: parseFloat(document.getElementById('oddsMin').value) || 1.0,
+            odds_max: parseFloat(document.getElementById('oddsMax').value) || 100.0,
+            staking_strategy: document.getElementById('stakingStrategy').value,
+            daily_bank: parseFloat(document.getElementById('dailyBank').value) || 1000,
+            stake_percentage: parseFloat(document.getElementById('stakePercentage').value) || 2,
+            base_stake: parseFloat(document.getElementById('baseStake').value) || 20,
+            date_start: document.getElementById('dateStart').value || null,
+            date_end: document.getElementById('dateEnd').value || null,
             time_start: allTimes ? null : (document.getElementById('timeStart').value || null),
             time_end: allTimes ? null : (document.getElementById('timeEnd').value || null),
             commission: parseFloat(document.getElementById('commission').value) || 0,
@@ -320,6 +709,13 @@
 
             document.getElementById('roi').textContent = (data.roi || 0).toFixed(2) + '%';
 
+            if (data.league_breakdown) updateLeagueBadges(data.league_breakdown);
+            updatePnlChart(data.daily_results);
+
+            // Restore football header
+            document.getElementById('resultsHead').innerHTML =
+                '<tr><th>Date</th><th>Bets</th><th>W / L</th><th>P&amp;L</th></tr>';
+
             if (data.daily_results && data.daily_results.length > 0) {
                 document.getElementById('resultsCard').style.display = 'block';
                 const rows = data.daily_results.map(day => {
@@ -342,6 +738,70 @@
         });
     }
 
+    function runHorsesAnalysis() {
+        const payload = {
+            date_from:        document.getElementById('hrDateStart').value,
+            date_to:          document.getElementById('hrDateEnd').value,
+            base_stake:       parseFloat(document.getElementById('hrBaseStake').value) || 10,
+            starting_bank:    parseFloat(document.getElementById('hrStartingBank').value) || 100,
+            commission:       parseFloat(document.getElementById('hrCommission').value) || 0,
+            odds_min:         parseFloat(document.getElementById('hrOddsMin').value) || 1.0,
+            odds_max:         parseFloat(document.getElementById('hrOddsMax').value) || 1000,
+            selected_tracks:  hrGetSelectedTracks(),
+            selected_markets: hrGetSelectedMarkets(),
+        };
+
+        const btn = document.getElementById('hrRunBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running...';
+
+        fetch('/api/horses/analysis', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+            if (data.error) { alert('Error: ' + data.error); return; }
+
+            const s = data.summary;
+            document.getElementById('totalBets').textContent = s.total_bets;
+            document.getElementById('winRate').textContent   = s.win_rate + '%';
+
+            const pnlEl = document.getElementById('totalPnL');
+            pnlEl.textContent = (s.total_pnl >= 0 ? '+' : '') + '£' + s.total_pnl.toFixed(2);
+            pnlEl.className   = s.total_pnl >= 0 ? 'pnl-positive h3' : 'pnl-negative h3';
+
+            document.getElementById('roi').textContent = (s.roi >= 0 ? '+' : '') + s.roi + '%';
+
+            // Swap table header and show bets list
+            document.getElementById('resultsHead').innerHTML =
+                '<tr><th>Date</th><th>Race</th><th>Selection</th><th>P&amp;L</th></tr>';
+            document.getElementById('pnlChartCard').style.display = 'none';
+            if (data.bets && data.bets.length) {
+                document.getElementById('resultsCard').style.display = 'block';
+                const rows = data.bets.map(b => {
+                    const pnlCls = b.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    return `<tr>
+                        <td>${(b.date||'').substring(0,10)}</td>
+                        <td>${b.race||''}</td>
+                        <td>${b.selection||''}</td>
+                        <td class="${pnlCls}">${(b.pnl>=0?'+':'') + '£' + b.pnl.toFixed(2)}</td>
+                    </tr>`;
+                });
+                document.getElementById('resultsTable').innerHTML = rows.join('');
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+            alert('Analysis failed: ' + err);
+        });
+    }
+
+    // ---- PDF import (from app folder) ----
     function processPDF() {
         const btn = document.getElementById('pdfBtn');
         const status = document.getElementById('pdfStatus');
@@ -353,7 +813,7 @@
         .then(r => r.json())
         .then(data => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF';
+            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF (folder)';
             if (data.error) {
                 status.innerHTML = `<span class="text-danger"><i class="fas fa-times me-1"></i>${data.error}</span>`;
             } else {
@@ -363,23 +823,40 @@
         })
         .catch(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF';
+            btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Import from PDF (folder)';
             status.innerHTML = '<span class="text-danger">Failed — check server logs</span>';
         });
     }
 
+    // ---- File upload (CSV or PDF) ----
     document.getElementById('uploadForm').addEventListener('submit', function(e) {
         e.preventDefault();
+        const status = document.getElementById('uploadStatus');
+        status.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Uploading...';
         fetch('/api/upload', {method: 'POST', body: new FormData(this)})
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                alert(`Added ${data.added} new records (total: ${data.total})`);
-                location.reload();
+                if (data.type === 'pdf') {
+                    status.innerHTML = `<span class="text-success"><i class="fas fa-check me-1"></i>PDF: extracted ${data.extracted}, added ${data.added} new records (total: ${data.total})</span>`;
+                } else {
+                    status.innerHTML = `<span class="text-success"><i class="fas fa-check me-1"></i>CSV: added ${data.added} new records (total: ${data.total})</span>`;
+                }
+                setTimeout(() => location.reload(), 1800);
             } else {
-                alert('Error: ' + data.error);
+                status.innerHTML = `<span class="text-danger"><i class="fas fa-times me-1"></i>${data.error}</span>`;
             }
+        })
+        .catch(() => {
+            status.innerHTML = '<span class="text-danger">Upload failed. Check server logs.</span>';
         });
+    });
+
+    // Auto-load league profitability on page load if data exists
+    document.addEventListener('DOMContentLoaded', function() {
+        if (document.querySelectorAll('.league-checkbox').length > 0) {
+            loadLeagueProfitability();
+        }
     });
 </script>
 </body>

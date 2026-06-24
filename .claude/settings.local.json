@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(.venv/Scripts/python -c ' *)"
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(git pull *)",
+      "Bash(.venv/Scripts/python -c \"import betfairlightweight; print\\(betfairlightweight.__version__\\)\")",
+      "Bash(.venv/Scripts/python -c \"from betfairlightweight import APIClient; import inspect; print\\(inspect.signature\\(APIClient.__init__\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('app.py', doraise=True\\); print\\('OK'\\)\")",
+      "PowerShell(python -m venv \"$env:USERPROFILE\\\\.bet_scenario_tool_venv\")",
+      "Bash(python -c \"import app\")"
     ]
   }
 }

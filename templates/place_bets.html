@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Place Bets</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+
+        .status-badge { font-size: 0.75rem; padding: 3px 8px; }
+
+        /* Selections table */
+        .sel-table th { font-size: 0.8rem; white-space: nowrap; }
+        .sel-table td { vertical-align: middle; }
+        .sel-table input { font-size: 0.85rem; }
+
+        /* Validation status cells */
+        .v-pending  { color: #6c757d; }
+        .v-found    { color: #198754; }
+        .v-multiple { color: #0d6efd; }
+        .v-notfound { color: #dc3545; }
+        .v-error    { color: #dc3545; }
+
+        /* Result rows */
+        .result-success { background: #d1e7dd; }
+        .result-failure { background: #f8d7da; }
+
+        .price-col { width: 90px; }
+        .stake-col { width: 90px; }
+        .type-col  { width: 100px; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+<div class="row flex-nowrap">
+
+    <!-- Sidebar -->
+    <div class="col-md-2 sidebar p-0">
+        <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+        <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+        <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+        <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+        <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+        <a href="/strategies"><i class="fas fa-flask me-2"></i> Strategies</a>
+        <a href="/horses"><i class="fas fa-horse me-2"></i> Horse Racing</a>
+        <a href="/today"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
+        <a href="/place-bets" class="active"><i class="fas fa-ticket-alt me-2"></i> Place Bets</a>
+        <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+    </div>
+
+    <!-- Main content -->
+    <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2><i class="fas fa-ticket-alt me-2"></i> Place Bets</h2>
+            <div class="d-flex align-items-center gap-2">
+                {% if betfair_configured %}
+                    {% if betfair_connected %}
+                    <span class="badge bg-success status-badge"><i class="fas fa-circle me-1"></i> Connected</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark status-badge"><i class="fas fa-circle me-1"></i> Configured (not connected)</span>
+                    {% endif %}
+                {% else %}
+                <span class="badge bg-danger status-badge"><i class="fas fa-circle me-1"></i> Not configured</span>
+                <a href="/settings" class="btn btn-sm btn-outline-danger">Set up Betfair</a>
+                {% endif %}
+                <button class="btn btn-sm btn-outline-secondary" onclick="connectBetfair()" id="connectBtn">
+                    <i class="fas fa-plug me-1"></i> Connect
+                </button>
+            </div>
+        </div>
+
+        {% if not betfair_configured %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Betfair credentials are not set up. Go to <a href="/settings">Settings</a> to add your username, password and app key before placing bets.
+        </div>
+        {% endif %}
+
+        <!-- ========== DAILY PICKS ========== -->
+        <div class="card mb-3">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-horse me-2"></i> Daily Picks</h6>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm" id="picksFileSelect" style="display:none; width:220px;"
+                            onchange="loadPicks(this.value)"></select>
+                    <button class="btn btn-sm btn-light" onclick="loadPicks()" id="loadPicksBtn">
+                        <i class="fas fa-download me-1"></i> Load Picks
+                    </button>
+                </div>
+            </div>
+            <div id="picksContent" style="display:none;">
+                <div class="p-0">
+                    <table class="table table-sm mb-0" id="picksTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:36px;">
+                                    <input type="checkbox" id="selectAllPicks" checked onchange="toggleAllPicks(this.checked)">
+                                </th>
+                                <th>Horse</th>
+                                <th>Course</th>
+                                <th>Time</th>
+                                <th>Rank</th>
+                                <th>ML Prob</th>
+                            </tr>
+                        </thead>
+                        <tbody id="picksBody"></tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex gap-2 align-items-center flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 small fw-bold text-nowrap">Win stake £</label>
+                        <input type="number" id="picksWinStake" class="form-control form-control-sm"
+                               value="1" min="0.01" step="0.5" style="width:75px;">
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 small fw-bold text-nowrap">Place stake £</label>
+                        <input type="number" id="picksPlaceStake" class="form-control form-control-sm"
+                               value="1" min="0.01" step="0.5" style="width:75px;">
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="addPicksByType('WIN')">
+                        <i class="fas fa-plus me-1"></i> Add Selected — Win
+                    </button>
+                    <button class="btn btn-info btn-sm" onclick="addPicksByType('PLACE')">
+                        <i class="fas fa-plus me-1"></i> Add Selected — Place
+                    </button>
+                    <span class="text-muted small" id="picksMsg"></span>
+                </div>
+            </div>
+            <div id="picksEmpty" class="card-body py-2">
+                <p class="text-muted mb-0 small" id="picksEmptyMsg">Press Load Picks to load today's selections from the picks folder.</p>
+            </div>
+        </div>
+
+        <!-- ========== BET SETTINGS ========== -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0"><i class="fas fa-sliders me-2"></i> Bet Settings <small class="text-muted fw-normal">(applied to all selections unless overridden per row)</small></h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+
+                    <div class="col-auto">
+                        <label class="form-label small fw-bold mb-1">Bet Type</label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="globalBetType" id="btWin" value="WIN" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="btWin">Win</label>
+                            <input type="radio" class="btn-check" name="globalBetType" id="btEW" value="EW">
+                            <label class="btn btn-outline-primary btn-sm" for="btEW">Each Way</label>
+                            <input type="radio" class="btn-check" name="globalBetType" id="btPlace" value="PLACE">
+                            <label class="btn btn-outline-primary btn-sm" for="btPlace">To Be Placed</label>
+                        </div>
+                    </div>
+
+                    <div class="col-auto">
+                        <label class="form-label small fw-bold mb-1">Price</label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="globalPriceType" id="ptSP" value="SP" checked onchange="toggleGlobalPrice()">
+                            <label class="btn btn-outline-secondary btn-sm" for="ptSP">SP</label>
+                            <input type="radio" class="btn-check" name="globalPriceType" id="ptFixed" value="FIXED" onchange="toggleGlobalPrice()">
+                            <label class="btn btn-outline-secondary btn-sm" for="ptFixed">Fixed</label>
+                        </div>
+                    </div>
+
+                    <div class="col-auto" id="globalPriceGroup" style="display:none;">
+                        <label class="form-label small fw-bold mb-1">Price</label>
+                        <input type="number" class="form-control form-control-sm price-col" id="globalPrice"
+                               placeholder="e.g. 5.0" step="0.01" min="1.01" value="">
+                    </div>
+
+                    <div class="col-auto">
+                        <label class="form-label small fw-bold mb-1">Stake (£)</label>
+                        <input type="number" class="form-control form-control-sm stake-col" id="globalStake"
+                               placeholder="e.g. 10" step="0.50" min="2" value="10">
+                        <small class="text-muted d-block mt-1" id="ewNote" style="display:none!important;">Unit stake — £ each way = £<span id="ewTotal">20</span> total</small>
+                    </div>
+
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="applyGlobalSettings()">
+                            <i class="fas fa-arrow-down me-1"></i> Apply to all rows
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SELECTIONS TABLE ========== -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-list me-2"></i> Selections</h6>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-light" onclick="addRow()">
+                        <i class="fas fa-plus me-1"></i> Add Row
+                    </button>
+                    <button class="btn btn-sm btn-light" onclick="openPasteModal()">
+                        <i class="fas fa-paste me-1"></i> Paste List
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm sel-table mb-0" id="selectionsTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:36px;"></th>
+                                <th>Horse Name</th>
+                                <th style="width:130px;">Venue</th>
+                                <th style="width:120px;">Date</th>
+                                <th style="width:90px;">Time</th>
+                                <th class="type-col">Bet Type</th>
+                                <th class="stake-col">Stake (£)</th>
+                                <th>Price</th>
+                                <th style="min-width:220px;">Validation</th>
+                            </tr>
+                        </thead>
+                        <tbody id="selBody">
+                            <!-- rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex gap-2">
+                    <button class="btn btn-outline-info btn-sm" onclick="validateAll()" id="validateBtn">
+                        <i class="fas fa-search me-1"></i> Validate All
+                    </button>
+                    <button class="btn btn-success" onclick="openConfirmModal()" id="placeBtn" disabled>
+                        <i class="fas fa-check-circle me-1"></i> Place Bets
+                    </button>
+                    <span class="text-muted small align-self-center" id="validateMsg"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== RESULTS ========== -->
+        <div id="resultsSection" style="display:none;">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h6 class="mb-0"><i class="fas fa-receipt me-2"></i> Placed Bets</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0" id="resultsTable">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th>Horse</th>
+                                <th>Market</th>
+                                <th>Type</th>
+                                <th>Stake</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Bet ID</th>
+                                <th>Error</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /col -->
+</div><!-- /row -->
+</div><!-- /container -->
+
+
+<!-- ========== PASTE MODAL ========== -->
+<div class="modal fade" id="pasteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-paste me-2"></i> Paste Selections</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">One selection per line. Supported formats:</p>
+                <ul class="text-muted small">
+                    <li><code>Horse Name</code></li>
+                    <li><code>Horse Name, Venue</code></li>
+                    <li><code>Horse Name, Venue, 2026-05-03</code></li>
+                    <li><code>Horse Name, Venue, 2026-05-03, 14:30</code></li>
+                </ul>
+                <textarea class="form-control font-monospace" id="pasteText" rows="10"
+                          placeholder="Frankel, Ascot, 2026-05-03, 14:30&#10;Enable, Goodwood&#10;Sea The Stars"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="importPaste()">Import</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== CONFIRM MODAL ========== -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i> Confirm Bet Placement</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">The following bets will be placed on Betfair Exchange. <strong>This cannot be undone.</strong></p>
+                <table class="table table-sm table-bordered" id="confirmTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Horse</th>
+                            <th>Market</th>
+                            <th>Type</th>
+                            <th>Stake</th>
+                            <th>Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="confirmBody"></tbody>
+                </table>
+                <div class="alert alert-warning py-2 mb-0">
+                    <strong>Total outlay: £<span id="confirmTotal">0.00</span></strong>
+                </div>
+                <div id="confirmSkipNote" class="alert alert-info py-2 mb-0 mt-2 small" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="placeBets()" id="confirmPlaceBtn">
+                    <i class="fas fa-check me-1"></i> Place Bets
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== RUNNER SELECT MODAL ========== -->
+<div class="modal fade" id="runnerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Choose Market</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="runnerModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ----------------------------------------------------------------
+//  State
+// ----------------------------------------------------------------
+let rowId = 0;
+const rows = {};   // rowId -> { el, validated, winMatch, placeMatch }
+let pendingRunnerRow = null;
+
+// ----------------------------------------------------------------
+//  Modals
+// ----------------------------------------------------------------
+const pasteModal    = new bootstrap.Modal(document.getElementById('pasteModal'));
+const confirmModal  = new bootstrap.Modal(document.getElementById('confirmModal'));
+const runnerModal   = new bootstrap.Modal(document.getElementById('runnerModal'));
+
+// ----------------------------------------------------------------
+//  Global settings helpers
+// ----------------------------------------------------------------
+function getGlobalBetType()   { return document.querySelector('input[name="globalBetType"]:checked').value; }
+function getGlobalPriceType() { return document.querySelector('input[name="globalPriceType"]:checked').value; }
+function getGlobalPrice()     { return document.getElementById('globalPrice').value; }
+function getGlobalStake()     { return document.getElementById('globalStake').value; }
+
+function toggleGlobalPrice() {
+    const fixed = getGlobalPriceType() === 'FIXED';
+    document.getElementById('globalPriceGroup').style.display = fixed ? '' : 'none';
+}
+
+document.querySelectorAll('input[name="globalBetType"]').forEach(r => r.addEventListener('change', () => {
+    const isEW = getGlobalBetType() === 'EW';
+    document.getElementById('ewNote').style.display = isEW ? '' : 'none';
+    updateEWTotal();
+}));
+document.getElementById('globalStake').addEventListener('input', updateEWTotal);
+
+function updateEWTotal() {
+    const s = parseFloat(document.getElementById('globalStake').value) || 0;
+    document.getElementById('ewTotal').textContent = (s * 2).toFixed(2);
+}
+
+function applyGlobalSettings() {
+    const bt = getGlobalBetType(), pt = getGlobalPriceType();
+    const price = getGlobalPrice(), stake = getGlobalStake();
+    Object.values(rows).forEach(({ el }) => {
+        el.querySelector('.row-bet-type').value = bt;
+        el.querySelector('.row-stake').value    = stake;
+        setRowPriceType(el, pt, price);
+    });
+}
+
+// ----------------------------------------------------------------
+//  Row management
+// ----------------------------------------------------------------
+const today = new Date().toISOString().slice(0, 10);
+
+function addRow(horse='', venue='', date='', time='') {
+    const id = ++rowId;
+    const bt    = getGlobalBetType();
+    const stake = getGlobalStake();
+    const pt    = getGlobalPriceType();
+    const price = getGlobalPrice();
+
+    const tr = document.createElement('tr');
+    tr.dataset.rowId = id;
+    tr.innerHTML = `
+        <td><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(${id})"><i class="fas fa-times"></i></button></td>
+        <td><input type="text"   class="form-control form-control-sm row-horse"    value="${esc(horse)}" placeholder="Horse name…"></td>
+        <td><input type="text"   class="form-control form-control-sm row-venue"    value="${esc(venue)}" placeholder="Venue…"></td>
+        <td><input type="date"   class="form-control form-control-sm row-date"     value="${date || today}"></td>
+        <td><input type="time"   class="form-control form-control-sm row-time"     value="${esc(time)}"></td>
+        <td>
+            <select class="form-select form-select-sm row-bet-type">
+                <option value="WIN"   ${bt==='WIN'  ?'selected':''}>Win</option>
+                <option value="EW"    ${bt==='EW'   ?'selected':''}>Each Way</option>
+                <option value="PLACE" ${bt==='PLACE'?'selected':''}>To Be Placed</option>
+            </select>
+        </td>
+        <td><input type="number" class="form-control form-control-sm row-stake"    value="${esc(stake)}" min="2" step="0.5"></td>
+        <td class="row-price-cell">
+            <div class="btn-group btn-group-sm">
+                <input type="radio" class="btn-check" name="pt_${id}" id="sp_${id}"    value="SP"    ${pt==='SP'   ?'checked':''}>
+                <label class="btn btn-outline-secondary py-0" for="sp_${id}">SP</label>
+                <input type="radio" class="btn-check" name="pt_${id}" id="fixed_${id}" value="FIXED" ${pt==='FIXED'?'checked':''}>
+                <label class="btn btn-outline-secondary py-0" for="fixed_${id}">Fixed</label>
+            </div>
+            <input type="number" class="form-control form-control-sm mt-1 row-fixed-price"
+                   placeholder="Price" step="0.01" min="1.01" value="${esc(price)}"
+                   style="display:${pt==='FIXED'?'':'none'}">
+        </td>
+        <td class="row-status v-pending" id="status_${id}"><span class="text-muted small">Not validated</span></td>
+    `;
+    document.getElementById('selBody').appendChild(tr);
+
+    // Toggle fixed price input when radio changes
+    tr.querySelectorAll(`input[name="pt_${id}"]`).forEach(r => r.addEventListener('change', () => {
+        const isFixed = tr.querySelector(`input[name="pt_${id}"]:checked`).value === 'FIXED';
+        tr.querySelector('.row-fixed-price').style.display = isFixed ? '' : 'none';
+    }));
+
+    rows[id] = { el: tr, validated: false, notFound: false, winMatch: null, placeMatch: null };
+    return id;
+}
+
+function removeRow(id) {
+    const row = rows[id];
+    if (row) { row.el.remove(); delete rows[id]; }
+    checkPlaceReady();
+}
+
+function setRowPriceType(el, pt, price) {
+    const id = el.dataset.rowId;
+    const spR  = el.querySelector(`#sp_${id}`);
+    const fixR = el.querySelector(`#fixed_${id}`);
+    if (pt === 'SP') { spR.checked = true; } else { fixR.checked = true; }
+    el.querySelector('.row-fixed-price').style.display = pt === 'FIXED' ? '' : 'none';
+    if (price) el.querySelector('.row-fixed-price').value = price;
+}
+
+function esc(s) { return (s||'').replace(/"/g,'&quot;'); }
+function cleanHorse(s) { return (s||'').replace(/'/g,'').trim(); }
+
+// ----------------------------------------------------------------
+//  Validate
+// ----------------------------------------------------------------
+async function validateAll() {
+    const ids = Object.keys(rows);
+    if (!ids.length) { alert('Add at least one selection first.'); return; }
+
+    document.getElementById('validateBtn').disabled = true;
+    document.getElementById('validateMsg').textContent = 'Searching Betfair…';
+    document.getElementById('placeBtn').disabled = true;
+
+    let found = 0, notFound = 0;
+
+    for (const id of ids) {
+        const row = rows[id];
+        const el  = row.el;
+
+        // Reset row state before each validation attempt
+        row.validated = false;
+        row.notFound  = false;
+        row.winMatch  = null;
+        row.placeMatch = null;
+
+        const rawHorse = el.querySelector('.row-horse').value.trim();
+        const horse = cleanHorse(rawHorse);
+        if (horse !== rawHorse) el.querySelector('.row-horse').value = horse;
+        const venue = el.querySelector('.row-venue').value.trim();
+        const date  = el.querySelector('.row-date').value;
+        const time  = el.querySelector('.row-time').value;
+
+        if (!horse) {
+            setStatus(id, 'v-pending', '<span class="text-muted small">Enter a horse name</span>');
+            continue;
+        }
+
+        setStatus(id, 'v-pending', '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Searching…</span>');
+
+        try {
+            const resp = await fetch('/api/betfair/search-runners', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ horse_name: horse, venue, date, time })
+            });
+            const data = await resp.json();
+
+            if (data.error) {
+                setStatus(id, 'v-error', `<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>${data.error}</span>`);
+                row.notFound = true;
+                notFound++;
+                continue;
+            }
+
+            if (!data.found || !data.matches.length) {
+                setStatus(id, 'v-notfound', `<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>Not found on Betfair</span>`);
+                row.notFound = true;
+                notFound++;
+                continue;
+            }
+
+            const betType = el.querySelector('.row-bet-type').value;
+            processMatches(id, data.matches, betType);
+            found++;
+
+        } catch (e) {
+            console.error('Validate error for row', id, e);
+            setStatus(id, 'v-error', `<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>Error: ${e.message || e}</span>`);
+            row.notFound = true;
+            notFound++;
+        }
+    }
+
+    document.getElementById('validateBtn').disabled = false;
+    document.getElementById('validateMsg').textContent =
+        `${found} found, ${notFound} not found`;
+
+    checkPlaceReady();
+}
+
+// Fallback heuristic if Betfair market data is unavailable
+function placesForRunnersFallback(count) { return count >= 9 ? 4 : 3; }
+
+// Get authoritative EW place count: prefer WIN market's ew_places (parsed from
+// Betfair rules text), then PLACE market's place_count, then runner-count heuristic.
+function resolveEWPlaces(winMatch, placeMatch) {
+    if (winMatch && winMatch.ew_places != null) return winMatch.ew_places;
+    if (placeMatch && placeMatch.place_count != null) return placeMatch.place_count;
+    const runnerCount = (placeMatch || winMatch || {}).runner_count || 0;
+    return placesForRunnersFallback(runnerCount);
+}
+
+// Return place count label string
+function placeLabel(winMatch, placeMatch) {
+    return `${resolveEWPlaces(winMatch, placeMatch)} to be placed`;
+}
+
+// Given a WIN match and a list of PLACE matches, pick the PLACE market whose
+// place_count matches the EW terms on the WIN market.
+// Falls back to the first PLACE match if nothing better is found.
+function pickPlaceForEW(winMatch, placeMatches) {
+    if (!placeMatches.length) return null;
+    if (!winMatch || winMatch.ew_places == null) return placeMatches[0];
+    return placeMatches.find(m => m.place_count === winMatch.ew_places) || placeMatches[0];
+}
+
+function processMatches(id, matches, betType) {
+    const row = rows[id];
+
+    const winMatches   = matches.filter(m => m.market_type === 'WIN');
+    const placeMatches = matches.filter(m => m.market_type === 'PLACE');
+
+    // ── To Be Placed: only needs a PLACE market ──
+    if (betType === 'PLACE') {
+        if (!placeMatches.length) {
+            setStatus(id, 'v-notfound', '<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>No PLACE market found</span>');
+            row.notFound = true;
+            return;
+        }
+        const ewWin = winMatches[0] || null;
+        const pm    = pickPlaceForEW(ewWin, placeMatches);
+        row.winMatch   = null;
+        row.placeMatch = pm;
+        row.validated  = true;
+        setStatus(id, 'v-found',
+            `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>${formatMarketLabel(pm)} — ${placeLabel(ewWin, pm)}</span>`);
+        return;
+    }
+
+    // ── Win / Each Way: needs a WIN market ──
+    const needsPlace = betType === 'EW';
+    const winMatch   = winMatches[0] || null;
+
+    if (!winMatch) {
+        setStatus(id, 'v-notfound', '<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>No WIN market found</span>');
+        row.notFound = true;
+        return;
+    }
+
+    const placeMatch = pickPlaceForEW(winMatch, placeMatches);
+
+    if (needsPlace && !placeMatch) {
+        setStatus(id, 'v-notfound', '<span class="text-warning small"><i class="fas fa-exclamation-triangle me-1"></i>WIN found but no PLACE market</span>');
+        row.notFound = true;
+        return;
+    }
+
+    if (winMatches.length > 1) {
+        const wJson = JSON.stringify(winMatches).replace(/"/g, '&quot;');
+        const pJson = JSON.stringify(placeMatches).replace(/"/g, '&quot;');
+        setStatus(id, 'v-multiple',
+            `<a href="#" class="small" onclick="openRunnerChoice(${id}, ${wJson}, ${pJson}, '${betType}'); return false;">
+              <i class="fas fa-question-circle me-1"></i>${winMatches.length} markets — choose one
+            </a>`);
+        row.validated = false;
+        return;
+    }
+
+    row.winMatch   = winMatch;
+    row.placeMatch = needsPlace ? placeMatch : null;
+    row.validated  = true;
+
+    const priceStr = winMatch.best_back_price ? `@ ${winMatch.best_back_price}` : '';
+    let ewLabel = '';
+    if (needsPlace && placeMatch) {
+        const fraction = winMatch.ew_divisor ? `1/${Math.round(winMatch.ew_divisor)}` : 'EW odds';
+        ewLabel = ` + PLACE (${placeLabel(winMatch, placeMatch)}, ${fraction})`;
+    }
+    setStatus(id, 'v-found',
+        `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>${formatMarketLabel(winMatch)}${ewLabel} ${priceStr}</span>`);
+}
+
+function formatMarketLabel(m) {
+    if (!m) return '';
+    const t = (m.start_time || '').substring(11, 16);
+    const ev = m.event_name || m.market_name || '';
+    return `${ev}${t ? ' '+t : ''}`;
+}
+
+function openRunnerChoice(id, winMatches, placeMatches, betType) {
+    const isPlaceOnly   = betType === 'PLACE';
+    const displayList   = isPlaceOnly ? placeMatches : winMatches;
+    const ewWinMatch    = winMatches[0] || null;
+    pendingRunnerRow = { id, winMatches, placeMatches, betType };
+    let html = '<div class="list-group">';
+    const dJson = JSON.stringify(displayList).replace(/"/g, '&quot;');
+    displayList.forEach((m, i) => {
+        const t  = (m.start_time || '').substring(11, 16);
+        const ev = m.event_name || m.market_name || '';
+        const p  = m.best_back_price ? `<span class="badge bg-secondary ms-2">${m.best_back_price}</span>` : '';
+        const extra = isPlaceOnly ? ` <span class="text-muted small">(${placeLabel(ewWinMatch, m)})</span>` : '';
+        html += `<button class="list-group-item list-group-item-action" onclick="selectRunner(${i}, ${dJson})">
+            <strong>${m.runner_name}</strong> — ${ev} ${t}${p}${extra}
+        </button>`;
+    });
+    html += '</div>';
+    document.getElementById('runnerModalBody').innerHTML = html;
+    runnerModal.show();
+}
+
+function selectRunner(idx, displayMatches) {
+    if (!pendingRunnerRow) return;
+    const { id, winMatches, placeMatches, betType } = pendingRunnerRow;
+    const row         = rows[id];
+    const isPlaceOnly = betType === 'PLACE';
+
+    if (isPlaceOnly) {
+        const pm     = displayMatches[idx];
+        const ewWin  = winMatches[0] || null;
+        row.winMatch   = null;
+        row.placeMatch = pm;
+        row.validated  = true;
+        setStatus(id, 'v-found',
+            `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>${formatMarketLabel(pm)} — ${placeLabel(ewWin, pm)}</span>`);
+    } else {
+        const winMatch   = displayMatches[idx];
+        const placeMatch = placeMatches.find(m => m.selection_id === winMatch.selection_id) || placeMatches[0] || null;
+        row.winMatch     = winMatch;
+        row.placeMatch   = betType === 'EW' ? placeMatch : null;
+        row.validated    = true;
+        const priceStr   = winMatch.best_back_price ? `@ ${winMatch.best_back_price}` : '';
+        const ewTag      = betType === 'EW' && placeMatch
+            ? ` + PLACE (${placeLabel(winMatch, placeMatch)}, ${winMatch.ew_divisor ? '1/'+Math.round(winMatch.ew_divisor) : 'EW odds'})`
+            : '';
+        setStatus(id, 'v-found',
+            `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>${formatMarketLabel(winMatch)}${ewTag} ${priceStr}</span>`);
+    }
+
+    runnerModal.hide();
+    checkPlaceReady();
+}
+
+function setStatus(id, cls, html) {
+    const cell = document.getElementById(`status_${id}`);
+    cell.className = `row-status ${cls}`;
+    cell.innerHTML = html;
+}
+
+function checkPlaceReady() {
+    const ids       = Object.keys(rows);
+    const anyValid  = ids.some(id => rows[id].validated);
+    const allResolved = ids.length > 0 && ids.every(id => rows[id].validated || rows[id].notFound);
+    document.getElementById('placeBtn').disabled = !(anyValid && allResolved);
+}
+
+// ----------------------------------------------------------------
+//  Confirmation modal
+// ----------------------------------------------------------------
+function openConfirmModal() {
+    const betList = buildBetList();
+    if (!betList.length) { alert('No validated bets to place.'); return; }
+
+    const skippedCount = Object.values(rows).filter(r => r.notFound).length;
+
+    let html = '';
+    let total = 0;
+    betList.forEach(b => {
+        const priceLabel = b.order_type === 'MARKET_ON_CLOSE' ? 'SP' : b.price;
+        const mktLabel   = b.market_type === 'PLACE' ? 'PLACE' : 'WIN';
+        html += `<tr>
+            <td>${b.horse_name}</td>
+            <td class="small text-muted">${b.market_id}</td>
+            <td><span class="badge bg-${mktLabel==='WIN'?'primary':'secondary'}">${mktLabel}</span></td>
+            <td>£${parseFloat(b.stake).toFixed(2)}</td>
+            <td>${priceLabel}</td>
+        </tr>`;
+        total += parseFloat(b.stake);
+    });
+
+    document.getElementById('confirmBody').innerHTML    = html;
+    document.getElementById('confirmTotal').textContent = total.toFixed(2);
+
+    const skipNote = document.getElementById('confirmSkipNote');
+    if (skippedCount > 0) {
+        skipNote.textContent = `${skippedCount} row${skippedCount > 1 ? 's' : ''} not found on Betfair will be skipped.`;
+        skipNote.style.display = '';
+    } else {
+        skipNote.style.display = 'none';
+    }
+
+    confirmModal.show();
+}
+
+// ----------------------------------------------------------------
+//  Build bet list from validated rows
+// ----------------------------------------------------------------
+function buildBetList() {
+    const list = [];
+    Object.entries(rows).forEach(([id, row]) => {
+        if (!row.validated) return;
+
+        const el        = row.el;
+        const horse     = cleanHorse(el.querySelector('.row-horse').value);
+        const stake     = parseFloat(el.querySelector('.row-stake').value) || 10;
+        const betType   = el.querySelector('.row-bet-type').value;
+        const ptChecked = el.querySelector(`input[name="pt_${id}"]:checked`);
+        const priceType = ptChecked ? ptChecked.value : 'SP';
+        const price     = parseFloat(el.querySelector('.row-fixed-price').value) || null;
+
+        const orderType = priceType === 'SP' ? 'MARKET_ON_CLOSE' : 'LIMIT';
+
+        // To Be Placed: PLACE leg only
+        if (betType === 'PLACE') {
+            if (!row.placeMatch) return;
+            list.push({
+                horse_name:   horse,
+                market_id:    row.placeMatch.market_id,
+                selection_id: row.placeMatch.selection_id,
+                handicap:     row.placeMatch.handicap || 0,
+                side:         'BACK',
+                order_type:   orderType,
+                stake,
+                price:        orderType === 'LIMIT' ? price : null,
+                market_type:  'PLACE',
+            });
+            return;
+        }
+
+        if (!row.winMatch) return;
+
+        // WIN leg
+        list.push({
+            horse_name:   horse,
+            market_id:    row.winMatch.market_id,
+            selection_id: row.winMatch.selection_id,
+            handicap:     row.winMatch.handicap || 0,
+            side:         'BACK',
+            order_type:   orderType,
+            stake,
+            price:        orderType === 'LIMIT' ? price : null,
+            market_type:  'WIN',
+        });
+
+        // PLACE leg (each way)
+        if (betType === 'EW' && row.placeMatch) {
+            list.push({
+                horse_name:   horse,
+                market_id:    row.placeMatch.market_id,
+                selection_id: row.placeMatch.selection_id,
+                handicap:     row.placeMatch.handicap || 0,
+                side:         'BACK',
+                order_type:   orderType,
+                stake,
+                price:        orderType === 'LIMIT' ? price : null,
+                market_type:  'PLACE',
+            });
+        }
+    });
+    return list;
+}
+
+// ----------------------------------------------------------------
+//  Place bets
+// ----------------------------------------------------------------
+async function placeBets() {
+    const btn = document.getElementById('confirmPlaceBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Placing…';
+
+    const betList = buildBetList();
+    try {
+        const resp = await fetch('/api/betfair/place-bets', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bets: betList })
+        });
+        const data = await resp.json();
+        confirmModal.hide();
+
+        if (data.error) { alert('Error: ' + data.error); return; }
+
+        renderResults(data.results);
+
+    } catch (e) {
+        alert('Network error: ' + e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Place Bets';
+    }
+}
+
+function renderResults(results) {
+    let html = '';
+    results.forEach(r => {
+        const ok        = r.status === 'SUCCESS';
+        const priceLabel = r.order_type === 'MARKET_ON_CLOSE' ? 'SP' : (r.price || '–');
+        const mktBadge  = `<span class="badge bg-${r.market_type==='WIN'?'primary':'secondary'}">${r.market_type||'WIN'}</span>`;
+        html += `<tr class="${ok ? 'result-success' : 'result-failure'}">
+            <td>${r.horse || '–'}</td>
+            <td class="small text-muted">${r.market_id || '–'}</td>
+            <td>${mktBadge}</td>
+            <td>${r.stake ? '£'+parseFloat(r.stake).toFixed(2) : '–'}</td>
+            <td>${priceLabel}</td>
+            <td><span class="badge bg-${ok?'success':'danger'}">${r.status}</span></td>
+            <td class="font-monospace small">${r.bet_id || '–'}</td>
+            <td class="text-danger small">${r.error || ''}</td>
+        </tr>`;
+    });
+    document.getElementById('resultsBody').innerHTML   = html;
+    document.getElementById('resultsSection').style.display = '';
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ----------------------------------------------------------------
+//  Paste import
+// ----------------------------------------------------------------
+function openPasteModal() { pasteModal.show(); }
+
+function importPaste() {
+    const lines = document.getElementById('pasteText').value
+        .split('\n').map(l => l.trim()).filter(Boolean);
+
+    lines.forEach(line => {
+        const parts = line.split(',').map(p => p.trim());
+        addRow(cleanHorse(parts[0])||'', parts[1]||'', parts[2]||'', parts[3]||'');
+    });
+
+    document.getElementById('pasteText').value = '';
+    pasteModal.hide();
+}
+
+// ----------------------------------------------------------------
+//  Connect
+// ----------------------------------------------------------------
+async function connectBetfair() {
+    const btn = document.getElementById('connectBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>';
+    try {
+        const resp = await fetch('/api/betfair/connect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Connection failed: ' + (data.message || 'unknown error'));
+        }
+    } catch (e) {
+        alert('Network error: ' + e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plug me-1"></i> Connect';
+    }
+}
+
+// ----------------------------------------------------------------
+//  Daily Picks
+// ----------------------------------------------------------------
+let loadedPicks = [];
+
+async function loadPicks(specificFile) {
+    const btn = document.getElementById('loadPicksBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>';
+
+    try {
+        // Discover available files
+        const filesResp = await fetch('/api/picks/files');
+        const filesData = await filesResp.json();
+        const sel = document.getElementById('picksFileSelect');
+
+        if (filesData.files && filesData.files.length > 1) {
+            sel.innerHTML = filesData.files.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join('');
+            sel.style.display = '';
+        } else {
+            sel.style.display = 'none';
+        }
+
+        const file = specificFile || (sel.style.display !== 'none' ? sel.value : '');
+        const url  = file ? `/api/picks/load?file=${encodeURIComponent(file)}` : '/api/picks/load';
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        if (data.error) { alert('Error: ' + data.error); return; }
+
+        loadedPicks = data.picks || [];
+        renderPicks(loadedPicks, data.message);
+
+    } catch (e) {
+        alert('Error loading picks: ' + e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-download me-1"></i> Load Picks';
+    }
+}
+
+function renderPicks(picks, message) {
+    document.getElementById('picksMsg').textContent = message || '';
+    if (!picks.length) {
+        document.getElementById('picksContent').style.display = 'none';
+        document.getElementById('picksEmpty').style.display = '';
+        document.getElementById('picksEmptyMsg').textContent = message || 'No picks found.';
+        return;
+    }
+    document.getElementById('picksContent').style.display = '';
+    document.getElementById('picksEmpty').style.display = 'none';
+    document.getElementById('selectAllPicks').checked = true;
+    document.getElementById('picksBody').innerHTML = picks.map((p, i) => `
+        <tr>
+            <td><input type="checkbox" class="pick-check" data-idx="${i}" checked></td>
+            <td><strong>${esc(p.horse)}</strong></td>
+            <td>${esc(p.course)}</td>
+            <td>${esc(p.time)}</td>
+            <td>${esc(p.rank)}</td>
+            <td>${esc(p.ml_prob)}</td>
+        </tr>
+    `).join('');
+}
+
+function toggleAllPicks(checked) {
+    document.querySelectorAll('.pick-check').forEach(cb => cb.checked = checked);
+}
+
+function addPicksByType(betType) {
+    const selected = [...document.querySelectorAll('.pick-check:checked')]
+        .map(cb => loadedPicks[parseInt(cb.dataset.idx)])
+        .filter(Boolean);
+
+    if (!selected.length) { alert('Select at least one pick.'); return; }
+
+    const isWin = betType === 'WIN';
+    const stake = isWin
+        ? (parseFloat(document.getElementById('picksWinStake').value)   || 1)
+        : (parseFloat(document.getElementById('picksPlaceStake').value) || 1);
+
+    // Remove any empty placeholder rows before adding picks
+    Object.keys(rows).forEach(id => {
+        const horse = rows[id].el.querySelector('.row-horse').value.trim();
+        if (!horse) removeRow(parseInt(id));
+    });
+
+    selected.forEach(pick => {
+        const rowId = addRow(pick.horse, pick.course, pick.date, pick.time);
+        rows[rowId].el.querySelector('.row-bet-type').value = betType;
+        rows[rowId].el.querySelector('.row-stake').value    = stake;
+    });
+
+    const n = selected.length;
+    const label = isWin ? 'Win' : 'Place';
+    document.getElementById('picksMsg').textContent =
+        `Added ${n} ${label} pick${n !== 1 ? 's' : ''} (£${stake} each)`;
+}
+
+// ----------------------------------------------------------------
+//  Boot: add one blank row
+// ----------------------------------------------------------------
+addRow();
+</script>
+</body>
+</html>

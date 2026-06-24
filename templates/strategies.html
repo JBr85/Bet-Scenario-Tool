@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Strategies — Bet Scenario Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { background:#f7f8fb; }
+        .sidebar { background:#1f2937; min-height:100vh; }
+        .sidebar a { color:#d1d5db; padding:.65rem 1rem; display:block; text-decoration:none; border-left:3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background:#111827; color:#fff; border-left-color:#3b82f6; }
+        .kpi h6 { color:#6b7280; font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:.72rem; margin-bottom:.15rem;}
+        .kpi h3 { margin-bottom:0; font-weight:700; }
+        .kpi { padding:.85rem 1rem; }
+        .filter-card .form-range { padding:0; }
+        .slider-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.35rem; }
+        .slider-row label { flex:0 0 130px; font-size:.78rem; color:#374151; margin:0; }
+        .slider-row .vals { flex:0 0 105px; text-align:right; font-variant-numeric:tabular-nums; font-size:.76rem; color:#111827; }
+        .slider-row input[type=range] { flex:1; }
+        .strategy-chip { cursor:pointer; user-select:none; }
+        .strategy-chip.active { background:#2563eb !important; color:#fff !important; border-color:#2563eb !important; }
+        .strat-mini-chip { cursor:pointer; user-select:none; padding:.05rem .4rem; font-size:.68rem; line-height:1.3; }
+        .strat-mini-chip.active { background:#2563eb !important; color:#fff !important; border-color:#2563eb !important; }
+        .mkt-strats-wrap label a { font-size:.68rem; }
+        .pattern-row { font-size:.8rem; }
+        #edgeBody tr { cursor:pointer; }
+        #edgeBody tr:hover { background:#eef2ff; }
+        #edgeBody tr.flash { background:#fde68a !important; transition:background .8s ease-out; }
+        .badge-pos { background:#10b981; }
+        .badge-neg { background:#ef4444; }
+        .badge-neu { background:#9ca3af; }
+        .table-strat td, .table-strat th { font-size:.78rem; white-space:nowrap; }
+        .price-pill { font-family:monospace; font-size:.74rem; background:#e5e7eb; padding:.1rem .35rem; border-radius:.25rem;}
+        .compact-card { box-shadow:0 1px 2px rgba(0,0,0,.04); }
+        .section-title { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:#6b7280; font-weight:700; margin:.65rem 0 .25rem; }
+        .mkt-card { border:1px solid #dee2e6; border-radius:6px; background:#fff; }
+        .mkt-card .mkt-head { background:#1f2937; color:#fff; padding:6px 10px; border-radius:6px 6px 0 0;
+                              display:flex; justify-content:space-between; align-items:center; }
+        .mkt-card .mkt-head label { color:#fff; margin:0; }
+        .mkt-card .mkt-body { padding:8px 10px; }
+        .mkt-card.disabled .mkt-body { opacity:0.45; pointer-events:none; }
+        .expand-btn { cursor:pointer; color:#2563eb; user-select:none; font-weight:bold; width:22px; text-align:center; display:inline-block; }
+        .expand-btn:hover { color:#1d4ed8; }
+        .day-detail-row > td { background:#f6f8fc; padding:6px 10px !important; }
+        .mkt-detail-row > td { background:#eef3fb; padding:6px 10px !important; }
+        .bets-table { font-size:.74rem; }
+        .bets-table th, .bets-table td { padding:2px 8px; }
+        .mkt-label-pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:.7rem;
+                          background:#2563eb; color:#fff; font-weight:600; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+            <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+            <a href="/strategies" class="active"><i class="fas fa-flask me-2"></i> Strategies</a>
+            <a href="/horses"><i class="fas fa-horse me-2"></i> Horse Racing</a>
+            <a href="/today"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
+            <a href="/place-bets"><i class="fas fa-ticket-alt me-2"></i> Place Bets</a>
+            <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-3" style="overflow-y:auto; height:100vh;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h3 class="mb-0"><i class="fas fa-flask me-2 text-primary"></i>Strategy Simulator</h3>
+                <div>
+                    <button class="btn btn-sm btn-outline-success" onclick="exportToExcel()" title="Export current simulation (results, settings, one tab per market)"><i class="fas fa-file-excel me-1"></i>Export to Excel</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="reimport()"><i class="fas fa-rotate me-1"></i>Re-import xlsx</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="resetFilters()"><i class="fas fa-eraser me-1"></i>Reset filters</button>
+                </div>
+            </div>
+            <p class="text-muted small mb-3">Each row is one in-play alert. <span class="price-pill">Strike</span>=True means the bet won. PnL = (price − 1) × stake × (1 − commission) on wins, −stake on losses (commission only applies to winnings). Move sliders for live filtering and P&amp;L recompute.</p>
+
+            <!-- Global commission (strategy selection is now per bet-type, on each market card below) -->
+            <div class="card compact-card mb-3">
+              <div class="card-body py-2">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <span class="text-muted small me-1">Each bet type runs against the strategies you tick on its card below.</span>
+                    <span class="ms-auto me-2 text-muted small">Commission %</span>
+                    <input id="commInput" type="number" min="0" max="10" step="0.5" value="2" class="form-control form-control-sm" style="width:80px;" oninput="recompute()" title="Applied to winnings only — same across all markets.">
+                </div>
+                <div class="mt-1 small text-muted" id="marketNote">
+                    Win/Loss is recomputed from the FT score against each enabled market. Each market below runs as its own bank.
+                </div>
+                <div class="mt-1 small text-muted" id="stakeNote"></div>
+              </div>
+            </div>
+
+            <!-- Banks & staking -->
+            <div class="card compact-card mb-3">
+              <div class="card-header py-2 d-flex align-items-center flex-wrap gap-2">
+                <strong><i class="fas fa-coins me-1 text-warning"></i>Banks &amp; staking</strong>
+                <div class="btn-group btn-group-sm ms-2" role="group" id="bankModeToggle">
+                  <input type="radio" class="btn-check" name="bankMode" id="bankModeIndependent" value="independent" checked>
+                  <label class="btn btn-outline-primary" for="bankModeIndependent">Independent banks</label>
+                  <input type="radio" class="btn-check" name="bankMode" id="bankModeShared" value="shared">
+                  <label class="btn btn-outline-primary" for="bankModeShared">Shared bank</label>
+                </div>
+                <span class="ms-2 small text-muted" id="bankModeNote">Each market gets its own bank and strategy — totals shown in KPIs &amp; daily table are summed.</span>
+              </div>
+              <div class="card-body py-2">
+                <!-- Shared-bank staking (one combined bank across all markets) -->
+                <div id="sharedBankPanel" class="mb-2 p-2 rounded" style="display:none;background:rgba(255,193,7,.06)">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-3 col-6">
+                      <label class="small text-muted mb-1">Shared bank £</label>
+                      <input type="number" class="form-control form-control-sm" id="sharedBank" value="1500" min="1" step="10">
+                    </div>
+                  </div>
+                  <div class="small text-muted mt-1">One combined bank across all enabled markets. Set each market's own staking below — pick <strong>% of bank</strong> to bet that percentage of the <em>shared</em> bank on that strategy (Draw / Over 1.5 / BTTS), or a flat £. Bets are merged chronologically and drawn from this single bank.</div>
+                </div>
+                <div class="row g-2" id="marketCardsRow"></div>
+              </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="row g-2 mb-3">
+                <div class="col"><div class="card compact-card kpi"><h6>Bets</h6><h3 id="kBets">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Matches</h6><h3 id="kMatches">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Hit-rate</h6><h3 id="kHit">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Total Staked</h6><h3 id="kStake">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Return</h6><h3 id="kReturn">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>P&amp;L</h6><h3 id="kPnl">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>ROI</h6><h3 id="kRoi">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Avg Odds</h6><h3 id="kAvgOdds">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6>Streaks W / L</h6><h3 id="kStreak">–</h3></div></div>
+            </div>
+
+            <!-- Risk & robustness KPIs -->
+            <div class="text-muted small mb-1"><i class="fas fa-shield-halved me-1"></i>Risk &amp; robustness <span class="text-secondary">— the rough with the smooth</span></div>
+            <div class="row g-2 mb-3">
+                <div class="col"><div class="card compact-card kpi"><h6 title="True peak-to-trough drawdown of the cumulative P&L curve — the deepest fall from any prior high. With variable stakes (% bank / Kelly) this can include the impact of partial wins mid-slump.">Max Drawdown</h6><h3 id="kMaxDD">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6 title="Longest run of consecutive losing bets (bet count, independent of stake size).">Worst losing streak</h6><h3 id="kMaxDDUnits">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6 title="From the end of the worst losing run, bets &amp; calendar days until cumulative P&L climbs back to its pre-run level. 'Not recovered' = never got back within the data.">Recovery to peak</h6><h3 id="kRecovery">–</h3></div></div>
+                <div class="col"><div class="card compact-card kpi"><h6 title="Gross wins ÷ gross losses. >1 = profitable; higher = sturdier">Profit Factor</h6><h3 id="kPF">–</h3></div></div>
+            </div>
+
+            <div class="row g-3">
+                <!-- Filters panel -->
+                <div class="col-lg-4">
+                    <div class="card compact-card filter-card">
+                        <div class="card-header py-2 d-flex align-items-center">
+                            <strong class="me-2"><i class="fas fa-sliders me-1"></i> Filters</strong>
+                            <span class="small text-muted" id="filterMatchCount"></span>
+                            <button class="btn btn-sm btn-outline-danger ms-auto py-0" onclick="resetFilters()" title="Clear all sliders and category filters">
+                                <i class="fas fa-eraser me-1"></i>Reset
+                            </button>
+                        </div>
+                        <div class="card-body py-2" style="max-height:65vh; overflow-y:auto;">
+                            <div class="section-title">Timing &amp; positions</div>
+                            <div id="filtersGeneral"></div>
+                            <div class="section-title">Alert-time score &amp; momentum</div>
+                            <div id="filtersAlertScore"></div>
+                            <div class="section-title">Alert-time xG &amp; shots</div>
+                            <div id="filtersAlertXg"></div>
+                            <div class="section-title">Possession &amp; pressure</div>
+                            <div id="filtersAlertPress"></div>
+                            <div class="section-title">Odds at alert time</div>
+                            <div id="filtersOdds"></div>
+                            <div class="section-title">Region / league</div>
+                            <div id="filtersCat"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-8">
+                    <!-- P&L chart -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2"><strong><i class="fas fa-chart-area me-1"></i> Cumulative P&amp;L</strong></div>
+                        <div class="card-body py-2"><canvas id="pnlChart" height="120"></canvas></div>
+                    </div>
+
+                    <!-- Daily breakdown -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-calendar-day me-1"></i> Daily breakdown</strong>
+                            <span class="small text-muted">Click <span class="expand-btn" style="cursor:default">+</span> to drill into markets, then into individual bets.</span>
+                        </div>
+                        <div class="card-body p-0" style="max-height:55vh; overflow:auto;">
+                            <table class="table table-sm table-strat mb-0" id="dailyTable">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width:30px"></th>
+                                        <th>Date</th>
+                                        <th class="text-end">Start Bank</th>
+                                        <th class="text-end">End Bank</th>
+                                        <th class="text-end">Bet Amount</th>
+                                        <th class="text-end">P&amp;L</th>
+                                        <th class="text-end">Bets</th>
+                                        <th class="text-end">Won</th>
+                                        <th class="text-end">Lost</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dailyBody"><tr><td colspan="9" class="text-center text-muted small p-3">No daily data yet.</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Per-strategy comparison -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2"><strong><i class="fas fa-balance-scale me-1"></i> Per-strategy comparison (current filters)</strong></div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm table-strat mb-0">
+                                <thead class="table-light">
+                                    <tr><th>Strategy</th><th class="text-end">Bets</th><th class="text-end">Hit-rate</th><th class="text-end">Avg Odds</th><th class="text-end">P&amp;L</th><th class="text-end">ROI</th></tr>
+                                </thead>
+                                <tbody id="compareBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Auto-optimiser -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2 d-flex flex-wrap align-items-center gap-2">
+                            <strong><i class="fas fa-wand-magic-sparkles me-1"></i> Auto-optimiser</strong>
+                            <span class="small text-muted me-auto">Beam-search across all features for the best <em id="optMarketLbl">market</em> ROI</span>
+                            <label class="small text-muted">Min N</label>
+                            <input id="optMinN" type="number" min="3" max="500" step="1" value="20" class="form-control form-control-sm" style="width:70px;">
+                            <label class="small text-muted">Depth</label>
+                            <input id="optDepth" type="number" min="1" max="5" step="1" value="3" class="form-control form-control-sm" style="width:60px;">
+                            <label class="small text-muted">Score</label>
+                            <select id="optMetric" class="form-select form-select-sm" style="width:160px;">
+                                <option value="size_adj" selected>Balanced (ROI × √N)</option>
+                                <option value="roi">Pure ROI</option>
+                                <option value="pnl">Total P&amp;L</option>
+                            </select>
+                            <label class="small text-muted">Mode</label>
+                            <select id="optMode" class="form-select form-select-sm" style="width:130px;" title="Fast = greedy beam search (may miss global best). Exhaustive = no pruning, guaranteed best given buckets.">
+                                <option value="beam" selected>Fast (beam)</option>
+                                <option value="exhaustive">Exhaustive</option>
+                            </select>
+                            <label class="small text-muted">Buckets</label>
+                            <select id="optBuckets" class="form-select form-select-sm" style="width:75px;" title="Quantile bins per numeric feature. 5 finds tighter ranges but risks overfitting.">
+                                <option value="3" selected>3</option>
+                                <option value="5">5</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary" onclick="runOptimizer()"><i class="fas fa-play me-1"></i>Find best</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm table-strat mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th><th>Filters</th><th class="text-end">N</th><th class="text-end">Hit-rate</th>
+                                        <th class="text-end">Avg Odds</th><th class="text-end">P&amp;L</th><th class="text-end">ROI</th><th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="optBody"><tr><td colspan="8" class="text-center text-muted small p-3">Click <strong>Find best</strong> to search.</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Pattern insights -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-magnifying-glass-chart me-1"></i> Edge finder</strong>
+                            <span class="small text-muted"><i class="fas fa-hand-pointer me-1"></i>Click a row to apply it as a filter</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm table-strat mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Feature</th><th>Bucket</th><th class="text-end">N</th>
+                                        <th class="text-end">Hit-rate</th><th class="text-end">Δ vs base</th>
+                                        <th class="text-end">Avg Odds</th><th class="text-end">P&amp;L (£1)</th><th class="text-end">ROI</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="edgeBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Bets table -->
+                    <div class="card compact-card mb-3">
+                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-table me-1"></i> Filtered alerts <span class="text-muted small" id="tableCount"></span></strong>
+                            <button class="btn btn-sm btn-outline-success py-0" onclick="exportFilteredAlerts()" title="Export this table only (all rows, no 500-row cap)"><i class="fas fa-file-excel me-1"></i>Export alerts</button>
+                        </div>
+                        <div class="card-body p-0" style="max-height:45vh; overflow:auto;">
+                            <table class="table table-sm table-strat mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr><th>Strat</th><th>Date</th><th>Min</th><th>League</th><th>Match</th>
+                                        <th class="text-end">Score @alert</th><th class="text-end">FT</th>
+                                        <th class="text-end">Price</th><th class="text-end">P&amp;L</th><th>Strike</th></tr>
+                                </thead>
+                                <tbody id="rowsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// =================== Data & state ===================
+let ALL_ROWS = [];          // raw rows from server (across all strategies)
+let META = [];              // [{strategy,count,wins}]
+let pnlChart = null;
+
+// Price columns available in the live-odds block
+const PRICE_COLUMNS = [
+  ['live_3way_home', 'Live 3-Way: Home'],
+  ['live_3way_draw', 'Live 3-Way: Draw'],
+  ['live_3way_away', 'Live 3-Way: Away'],
+  ['live_over_0_5_goals', 'Live Over 0.5'],
+  ['live_under_0_5_goals', 'Live Under 0.5'],
+  ['live_over_1_5_goals', 'Live Over 1.5'],
+  ['live_under_1_5_goals', 'Live Under 1.5'],
+  ['live_over_2_5_goals', 'Live Over 2.5'],
+  ['live_under_2_5_goals', 'Live Under 2.5'],
+  ['live_over_3_5_goals', 'Live Over 3.5'],
+  ['live_under_3_5_goals', 'Live Under 3.5'],
+  ['live_over_4_5_goals', 'Live Over 4.5'],
+  ['live_under_4_5_goals', 'Live Under 4.5'],
+  ['live_btts_yes', 'Live BTTS: Yes'],
+  ['live_btts_no', 'Live BTTS: No'],
+  ['pre_3way_home', 'Pre-Match 3-Way: Home'],
+  ['pre_3way_draw', 'Pre-Match 3-Way: Draw'],
+  ['pre_3way_away', 'Pre-Match 3-Way: Away'],
+];
+
+// Fixed strategy hierarchy: Boost → Main Home → Main Away → Back Up Boost.
+// Drives chip/comparison display order AND dedupe precedence (when one game
+// triggers across multiple strategies the higher-ranked strategy's bet is kept).
+// "Back Up Boost" is checked first because its name also contains "boost".
+function stratRank(name) {
+  const k = String(name || '').toLowerCase();
+  if (k.includes('back up') || k.includes('backup')) return 3;
+  if (k.includes('home')) return 1;
+  if (k.includes('away')) return 2;
+  if (k.includes('boost')) return 0;
+  return 9;
+}
+
+// Default market on first load — Over 1.5 is the strategy's native bet so
+// it's the most honest starting point. Switch the dropdown to "what if" other markets.
+const DEFAULT_MARKET = 'live_over_1_5_goals';
+
+// Per-market simulator: each market has its own bank/strategy and the daily
+// breakdown sums across them. "Bang" is the Over 2.5 Goals bet type.
+const SIM_MARKETS_STRAT = [
+  { key: 'live_3way_draw',      label: 'Live 3-Way: Draw',
+    defaults: { enabled: true, mode: 'flat',    bank: 500, stake: 5,  pct: 5, cap: 50 } },
+  { key: 'live_over_1_5_goals', label: 'Live Over 1.5',
+    defaults: { enabled: true, mode: 'pctBank', bank: 500, stake: 10, pct: 5, cap: 50 } },
+  { key: 'live_btts_yes',       label: 'Live BTTS: Yes',
+    defaults: { enabled: true, mode: 'flat',    bank: 500, stake: 5,  pct: 5, cap: 50 } },
+  { key: 'live_over_2_5_goals', label: 'Bang (Over 2.5)',
+    defaults: { enabled: true, mode: 'flat',    bank: 500, stake: 5,  pct: 5, cap: 50 } },
+];
+
+// Per-bet cap for pctBank mode (kept per-market and configurable now).
+const PCT_BANK_DAILY_CAP_DEFAULT = 100;
+
+// Expand state for the daily breakdown table.
+const EXPANDED_DAYS = {};
+const EXPANDED_MARKETS = {};        // key = `${date}|${marketKey}`
+let DAILY_DATA = [];                // last per-day breakdown from computePnLPerMarket
+
+// Slider definitions: [field, label, group, step]
+const SLIDERS = [
+  ['md_timer','Alert minute','general',1],
+  ['md_home_pos','Home pos','general',1],
+  ['md_away_pos','Away pos','general',1],
+
+  ['alert_h_score','H score','alertScore',1],
+  ['alert_a_score','A score','alertScore',1],
+  ['alert_score_diff','Score diff (H−A)','alertScore',1],
+  ['alert_h_momentum','H momentum','alertScore',1],
+  ['alert_a_momentum','A momentum','alertScore',1],
+  ['alert_momentum_diff','Momentum diff','alertScore',1],
+
+  ['alert_h_xg','H xG','alertXg',0.05],
+  ['alert_a_xg','A xG','alertXg',0.05],
+  ['alert_xg_diff','xG diff (H−A)','alertXg',0.05],
+  ['alert_h_sot','H SOT','alertXg',1],
+  ['alert_a_sot','A SOT','alertXg',1],
+  ['alert_h_soff','H SOFF','alertXg',1],
+  ['alert_a_soff','A SOFF','alertXg',1],
+
+  ['alert_h_poss_pct','H Possession %','alertPress',1],
+  ['alert_a_poss_pct','A Possession %','alertPress',1],
+  ['alert_h_attacks','H Attacks','alertPress',1],
+  ['alert_a_attacks','A Attacks','alertPress',1],
+  ['alert_h_dn_attacks','H Dn Attacks','alertPress',1],
+  ['alert_a_dn_attacks','A Dn Attacks','alertPress',1],
+  ['alert_h_corners','H Corners','alertPress',1],
+  ['alert_a_corners','A Corners','alertPress',1],
+
+  ['live_3way_home','Live Odds Home','odds',0.05],
+  ['live_3way_draw','Live Odds Draw','odds',0.05],
+  ['live_3way_away','Live Odds Away','odds',0.05],
+  ['live_over_2_5_goals','Live O2.5','odds',0.05],
+  ['live_under_2_5_goals','Live U2.5','odds',0.05],
+];
+
+// =================== Boot ===================
+document.addEventListener('DOMContentLoaded', async () => {
+  buildMarketCards();
+  wireBankMode();
+  await loadData();
+});
+
+// =================== Bank mode (independent vs shared) ===================
+function getBankMode() {
+  const el = document.querySelector('input[name="bankMode"]:checked');
+  return el ? el.value : 'independent';
+}
+
+function wireBankMode() {
+  document.querySelectorAll('input[name="bankMode"]').forEach(el =>
+    el.addEventListener('change', () => { applyBankModeUI(); recompute(); }));
+  const bank = document.getElementById('sharedBank');
+  if (bank) bank.addEventListener('input', recompute);
+  applyBankModeUI();
+}
+
+// Toggle the shared-bank panel and hide per-market staking controls when the
+// shared bank is active (each card keeps its enabled checkbox + odds range).
+function applyBankModeUI() {
+  const shared = getBankMode() === 'shared';
+  const panel = document.getElementById('sharedBankPanel');
+  if (panel) panel.style.display = shared ? '' : 'none';
+  const note = document.getElementById('bankModeNote');
+  if (note) note.textContent = shared
+    ? 'One combined bank across all enabled markets — bets are merged chronologically and staked from a single bank.'
+    : 'Each market gets its own bank and strategy — totals shown in KPIs & daily table are summed.';
+  SIM_MARKETS_STRAT.forEach(m => updateMarketStakeRows(m.key));
+}
+
+// The shared bank itself (size + commission). Each market's own staking rule
+// (flat £ or % of bank) decides how much of this shared bank to stake per bet.
+function getSharedConfig() {
+  const commPct = parseFloat(document.getElementById('commInput').value) || 0;
+  const bank = parseFloat(document.getElementById('sharedBank').value) || 0;
+  return { commPct, startingBank: bank };
+}
+
+async function loadData() {
+  const r = await fetch('/api/strategies/data?strategy=all');
+  const j = await r.json();
+  ALL_ROWS = j.rows || [];
+  META = (j.meta || []).sort((a, b) =>
+    stratRank(a.strategy) - stratRank(b.strategy) || String(a.strategy).localeCompare(String(b.strategy)));
+  // Derive score/momentum/xg diffs for filter convenience
+  ALL_ROWS.forEach(r => {
+    const d = r.data;
+    d.alert_score_diff = num(d.alert_h_score) - num(d.alert_a_score);
+    d.alert_momentum_diff = num(d.alert_h_momentum) - num(d.alert_a_momentum);
+    d.alert_xg_diff = num(d.alert_h_xg) - num(d.alert_a_xg);
+  });
+  buildMarketStrategySelectors();
+  buildSliders();
+  buildCategoryFilters();
+  recompute();
+}
+
+// =================== Per-market UI ===================
+function buildMarketCards() {
+  const row = document.getElementById('marketCardsRow');
+  if (!row) return;
+  row.innerHTML = SIM_MARKETS_STRAT.map(m => {
+    const d = m.defaults;
+    return `
+      <div class="col-md-3">
+        <div class="mkt-card" id="mktCard_${m.key}">
+          <div class="mkt-head">
+            <div class="form-check m-0">
+              <input class="form-check-input mkt-enabled" type="checkbox" id="mktEnabled_${m.key}" data-mkt="${m.key}" ${d.enabled?'checked':''}>
+              <label class="form-check-label small" for="mktEnabled_${m.key}"><strong>${m.label}</strong></label>
+            </div>
+            <span class="badge bg-light text-dark mkt-pnl-badge" data-mkt="${m.key}">–</span>
+          </div>
+          <div class="mkt-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 mkt-strats-wrap">
+                <label class="small text-muted mb-1 d-flex justify-content-between align-items-center">
+                  <span title="Only these strategies' alerts feed this bet type. Games triggered by more than one ticked strategy are counted once.">Strategies</span>
+                  <span><a href="#" class="mkt-strat-all">all</a> · <a href="#" class="mkt-strat-none">none</a></span>
+                </label>
+                <div class="mkt-strats d-flex flex-wrap gap-1" data-mkt="${m.key}">
+                  <span class="text-muted small">loading…</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="small text-muted mb-1">Staking</label>
+                <select class="form-select form-select-sm mkt-mode" data-mkt="${m.key}">
+                  <option value="flat">Flat £</option>
+                  <option value="pctBank">% of bank (daily)</option>
+                </select>
+              </div>
+              <div class="col-6 mkt-bank-field">
+                <label class="small text-muted mb-1">Bank £</label>
+                <input type="number" class="form-control form-control-sm mkt-bank" data-mkt="${m.key}" value="${d.bank}" min="1" step="10">
+              </div>
+              <div class="col-6 mkt-flat-row">
+                <label class="small text-muted mb-1">Stake £</label>
+                <input type="number" class="form-control form-control-sm mkt-stake" data-mkt="${m.key}" value="${d.stake}" min="0.1" step="0.5">
+              </div>
+              <div class="col-6 mkt-pct-row" style="display:none">
+                <label class="small text-muted mb-1">% of bank</label>
+                <input type="number" class="form-control form-control-sm mkt-pct" data-mkt="${m.key}" value="${d.pct}" min="0.01" step="0.1">
+              </div>
+              <div class="col-6 mkt-pct-row" style="display:none">
+                <label class="small text-muted mb-1" title="Cap £ per bet">Cap £</label>
+                <input type="number" class="form-control form-control-sm mkt-cap" data-mkt="${m.key}" value="${d.cap}" min="1" step="1">
+              </div>
+              <div class="col-12">
+                <label class="small text-muted mb-1" title="Only count bets whose price on this market falls within this range. Leave blank for no limit.">Odds range</label>
+                <div class="d-flex align-items-center gap-1">
+                  <input type="number" class="form-control form-control-sm mkt-odds-min" data-mkt="${m.key}" value="${d.oddsMin ?? ''}" min="1" step="0.1" placeholder="from">
+                  <span class="text-muted small">–</span>
+                  <input type="number" class="form-control form-control-sm mkt-odds-max" data-mkt="${m.key}" value="${d.oddsMax ?? ''}" min="1" step="0.1" placeholder="to">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  SIM_MARKETS_STRAT.forEach(m => {
+    const card = document.getElementById('mktCard_' + m.key);
+    const mode = card.querySelector('.mkt-mode');
+    mode.value = m.defaults.mode;
+    updateMarketStakeRows(m.key);
+    updateMarketCardDisabled(m.key);
+    mode.addEventListener('change', () => { updateMarketStakeRows(m.key); recompute(); });
+    card.querySelector('.mkt-enabled').addEventListener('change', () => { updateMarketCardDisabled(m.key); recompute(); });
+    card.querySelectorAll('.mkt-bank, .mkt-stake, .mkt-pct, .mkt-cap, .mkt-odds-min, .mkt-odds-max').forEach(el => {
+      el.addEventListener('input', recompute);
+    });
+    card.querySelector('.mkt-strat-all')?.addEventListener('click', e => {
+      e.preventDefault();
+      card.querySelectorAll('.strat-mini-chip').forEach(c => c.classList.add('active'));
+      recompute();
+    });
+    card.querySelector('.mkt-strat-none')?.addEventListener('click', e => {
+      e.preventDefault();
+      card.querySelectorAll('.strat-mini-chip').forEach(c => c.classList.remove('active'));
+      recompute();
+    });
+  });
+}
+
+function updateMarketStakeRows(mkey) {
+  const card = document.getElementById('mktCard_' + mkey);
+  if (!card) return;
+  // Per-market Bank £ only applies to independent banks; under a shared bank the
+  // single pot is set globally, but each market keeps its own staking rule.
+  const shared = getBankMode() === 'shared';
+  card.querySelectorAll('.mkt-bank-field').forEach(el => { el.style.display = shared ? 'none' : ''; });
+  const mode = card.querySelector('.mkt-mode').value;
+  card.querySelector('.mkt-flat-row').style.display = (mode === 'flat') ? '' : 'none';
+  card.querySelectorAll('.mkt-pct-row').forEach(el => { el.style.display = (mode === 'pctBank') ? '' : 'none'; });
+}
+
+function updateMarketCardDisabled(mkey) {
+  const card = document.getElementById('mktCard_' + mkey);
+  if (!card) return;
+  const on = card.querySelector('.mkt-enabled').checked;
+  card.classList.toggle('disabled', !on);
+}
+
+function getMarketsConfig() {
+  const commPct = parseFloat(document.getElementById('commInput').value) || 0;
+  const markets = {};
+  SIM_MARKETS_STRAT.forEach(m => {
+    const card = document.getElementById('mktCard_' + m.key);
+    if (!card) return;
+    const enabled = card.querySelector('.mkt-enabled').checked;
+    const mode = card.querySelector('.mkt-mode').value;
+    const bank = parseFloat(card.querySelector('.mkt-bank').value) || 0;
+    const stake = parseFloat(card.querySelector('.mkt-stake').value) || 0;
+    const pct = parseFloat(card.querySelector('.mkt-pct').value) || 0;
+    const capRaw = parseFloat(card.querySelector('.mkt-cap').value);
+    const cap = isFinite(capRaw) ? capRaw : Infinity;   // blank Cap £ = no per-bet cap
+    const oddsMinRaw = parseFloat(card.querySelector('.mkt-odds-min').value);
+    const oddsMaxRaw = parseFloat(card.querySelector('.mkt-odds-max').value);
+    const oddsMin = isFinite(oddsMinRaw) ? oddsMinRaw : null;
+    const oddsMax = isFinite(oddsMaxRaw) ? oddsMaxRaw : null;
+    const oddsLbl = (oddsMin != null || oddsMax != null)
+      ? `, odds ${oddsMin != null ? oddsMin : '–'}–${oddsMax != null ? oddsMax : '–'}` : '';
+    const cfg = (mode === 'pctBank')
+      ? { mode: 'pctBank', commPct, startingBank: bank, pct, cap, oddsMin, oddsMax,
+          label: `% of bank — start £${bank.toFixed(2)}, ${pct}%/bet (${isFinite(cap) ? `cap £${cap}/bet` : 'no cap'})${oddsLbl}` }
+      : { mode: 'flat', commPct, stake, startingBank: bank, oddsMin, oddsMax,
+          label: `Flat £${stake.toFixed(2)}/bet (start bank £${bank.toFixed(2)})${oddsLbl}` };
+    markets[m.key] = { enabled, label: m.label, strategies: getMarketStrategies(m.key), cfg };
+  });
+  return { commPct, markets };
+}
+
+function getEnabledMarketFields() {
+  const mcfg = getMarketsConfig();
+  return Object.keys(mcfg.markets).filter(k => mcfg.markets[k].enabled);
+}
+function setEnabledMarkets(values) {
+  const wanted = new Set(values);
+  SIM_MARKETS_STRAT.forEach(m => {
+    const cb = document.querySelector('.mkt-enabled[data-mkt="' + m.key + '"]');
+    if (cb) cb.checked = wanted.has(m.key);
+    updateMarketCardDisabled(m.key);
+  });
+}
+
+function num(v) { const x = parseFloat(v); return isFinite(x) ? x : 0; }
+
+// =================== Market outcome (what-if simulator) ===================
+// Given a price column (e.g. 'live_over_2_5_goals') and a FT score string
+// (e.g. '2-1'), decide whether that bet would have won.
+// Returns 1 (win), 0 (loss), or null (unknown — can't evaluate from this row).
+const MARKET_RULES = {
+  '3way_home':  (h,a) => h>a,
+  '3way_draw':  (h,a) => h===a,
+  '3way_away':  (h,a) => h<a,
+  'over_0_5':   (h,a) => (h+a) > 0,
+  'under_0_5':  (h,a) => (h+a) < 1,
+  'over_1_5':   (h,a) => (h+a) > 1,
+  'under_1_5':  (h,a) => (h+a) < 2,
+  'over_2_5':   (h,a) => (h+a) > 2,
+  'under_2_5':  (h,a) => (h+a) < 3,
+  'over_3_5':   (h,a) => (h+a) > 3,
+  'under_3_5':  (h,a) => (h+a) < 4,
+  'over_4_5':   (h,a) => (h+a) > 4,
+  'under_4_5':  (h,a) => (h+a) < 5,
+  'btts_yes':   (h,a) => h>0 && a>0,
+  'btts_no':    (h,a) => !(h>0 && a>0),
+};
+const MARKET_LABEL = {
+  '3way_home':'Home Win','3way_draw':'Draw','3way_away':'Away Win',
+  'over_0_5':'Over 0.5','under_0_5':'Under 0.5',
+  'over_1_5':'Over 1.5','under_1_5':'Under 1.5',
+  'over_2_5':'Over 2.5','under_2_5':'Under 2.5',
+  'over_3_5':'Over 3.5','under_3_5':'Under 3.5',
+  'over_4_5':'Over 4.5','under_4_5':'Under 4.5',
+  'btts_yes':'BTTS Yes','btts_no':'BTTS No',
+};
+function priceFieldToMarket(field) {
+  return String(field || '').replace(/^(live_|pre_)/, '').replace(/_goals$/, '');
+}
+function parseScore(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(-?\d+)\s*-\s*(-?\d+)/);
+  if (!m) return null;
+  return [parseInt(m[1],10), parseInt(m[2],10)];
+}
+function marketResult(priceField, row) {
+  const key = priceFieldToMarket(priceField);
+  const fn = MARKET_RULES[key];
+  if (!fn) return null;
+  const ft = parseScore(row.data?.sum_ft_score);
+  if (!ft) return null;
+  return fn(ft[0], ft[1]) ? 1 : 0;
+}
+function effectiveStrike(priceField, row) {
+  // If the chosen market can be evaluated from FT score, use that. Otherwise
+  // fall back to the originally-recorded Strike (the historical bet result).
+  const sim = marketResult(priceField, row);
+  return sim != null ? sim : (row.strike ? 1 : 0);
+}
+
+// Per bet-type strategy selection. Each market card carries its own set of
+// strategy toggle chips; only the ticked strategies' alerts feed that market
+// (and games triggered by >1 ticked strategy are deduped within the market).
+// Built after data load because the strategy list comes from META.
+function buildMarketStrategySelectors() {
+  const strats = META.map(m => m.strategy)
+    .sort((a, b) => stratRank(a) - stratRank(b) || String(a).localeCompare(String(b)));
+  SIM_MARKETS_STRAT.forEach(m => {
+    const host = document.querySelector('.mkt-strats[data-mkt="' + m.key + '"]');
+    if (!host) return;
+    if (!strats.length) { host.innerHTML = '<span class="text-muted small">no strategies</span>'; return; }
+    host.innerHTML = strats.map(s =>
+      `<button type="button" class="btn btn-sm btn-outline-secondary strat-mini-chip active" data-strat="${escapeAttr(s)}" title="${escapeAttr(s)}">${s}</button>`
+    ).join('');
+    host.querySelectorAll('.strat-mini-chip').forEach(b => {
+      b.addEventListener('click', () => { b.classList.toggle('active'); recompute(); });
+    });
+  });
+}
+
+// Strategy names ticked on a given market card. Defaults to all strategies if
+// the card hasn't been populated yet (e.g. during the first recompute).
+function getMarketStrategies(mkey) {
+  const host = document.querySelector('.mkt-strats[data-mkt="' + mkey + '"]');
+  if (!host) return META.map(m => m.strategy);
+  const chips = host.querySelectorAll('.strat-mini-chip');
+  if (!chips.length) return META.map(m => m.strategy);
+  return [...chips].filter(b => b.classList.contains('active')).map(b => b.dataset.strat);
+}
+
+function pickSmartDefaultPrice() {
+  if (!getEnabledMarketFields().length) setEnabledMarkets([DEFAULT_MARKET]);
+}
+
+// =================== Selected-markets helpers ===================
+// Backed by the per-market cards now — kept under the old name so the legacy
+// callers (renderRows, renderEdge banner, optimiser label, exports) keep working.
+function getSelectedMarkets() { return getEnabledMarketFields(); }
+function setSelectedMarkets(values) {
+  setEnabledMarkets(values);
+}
+function marketLabelFor(field) {
+  return (PRICE_COLUMNS.find(c => c[0] === field) || [, field])[1];
+}
+
+// =================== Filter sliders ===================
+const FILTER_STATE = {};   // field -> {min,max,realMin,realMax}
+
+function buildSliders() {
+  ['general','alertScore','alertXg','alertPress','odds'].forEach(g => {
+    document.getElementById('filters' + g.charAt(0).toUpperCase() + g.slice(1)).innerHTML='';
+  });
+  SLIDERS.forEach(([field,label,group,step]) => {
+    let values = ALL_ROWS.map(r => num(r.data[field])).filter(v => isFinite(v));
+    if (!values.length) return;
+    const mn = Math.floor(Math.min(...values) / step) * step;
+    const mx = Math.ceil(Math.max(...values) / step) * step;
+    if (mn === mx) return;
+    FILTER_STATE[field] = {min:mn, max:mx, realMin:mn, realMax:mx};
+    const wrap = document.createElement('div');
+    wrap.className = 'mb-2';
+    const fmt = step < 1 ? 2 : 0;
+    wrap.innerHTML = `
+      <div class="d-flex justify-content-between" style="font-size:.74rem;">
+        <span class="text-muted">${label}</span>
+        <span class="text-dark" id="lbl_${field}">${mn.toFixed(fmt)} – ${mx.toFixed(fmt)}</span>
+      </div>
+      <div class="d-flex gap-1">
+        <input type="range" class="form-range" min="${mn}" max="${mx}" step="${step}" value="${mn}" id="min_${field}">
+        <input type="range" class="form-range" min="${mn}" max="${mx}" step="${step}" value="${mx}" id="max_${field}">
+      </div>`;
+    document.getElementById('filters' + group.charAt(0).toUpperCase() + group.slice(1)).appendChild(wrap);
+    const mnEl = document.getElementById('min_'+field);
+    const mxEl = document.getElementById('max_'+field);
+    const update = () => {
+        let a = num(mnEl.value), b = num(mxEl.value);
+        if (a > b) [a,b] = [b,a];
+        FILTER_STATE[field].min = a;
+        FILTER_STATE[field].max = b;
+        document.getElementById('lbl_'+field).textContent = `${a.toFixed(fmt)} – ${b.toFixed(fmt)}`;
+        recompute();
+    };
+    mnEl.addEventListener('input', update);
+    mxEl.addEventListener('input', update);
+  });
+}
+
+function buildCategoryFilters() {
+  const regions = [...new Set(ALL_ROWS.map(r => r.region).filter(Boolean))].sort();
+  const leagues = [...new Set(ALL_ROWS.map(r => r.league).filter(Boolean))].sort();
+  const dates = ALL_ROWS.map(r => rowDate(r)).filter(Boolean).sort();
+  const dmin = dates[0] || '';
+  const dmax = dates[dates.length - 1] || '';
+  const host = document.getElementById('filtersCat');
+  host.innerHTML = `
+    <div class="mb-2">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Date range</span>
+        <a href="#" class="small" onclick="clearDates();return false;">clear</a></div>
+      <div class="d-flex gap-1">
+        <input type="date" id="dateFrom" class="form-control form-control-sm" min="${dmin}" max="${dmax}" onchange="recompute()" title="From (alert date, inclusive)">
+        <input type="date" id="dateTo" class="form-control form-control-sm" min="${dmin}" max="${dmax}" onchange="recompute()" title="To (alert date, inclusive)">
+      </div>
+      <div class="text-muted" style="font-size:.7rem;">Available: ${dmin || '–'} → ${dmax || '–'}</div>
+    </div>
+    <div class="mb-2">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Region</span>
+        <a href="#" class="small" onclick="clearMulti('regSel');return false;">clear</a></div>
+      <select id="regSel" multiple class="form-select form-select-sm" size="4" onchange="recompute()">
+        ${regions.map(r => `<option value="${escapeAttr(r)}">${r}</option>`).join('')}
+      </select>
+    </div>
+    <div class="mb-2">
+      <div class="d-flex justify-content-between"><span class="text-muted small">League</span>
+        <a href="#" class="small" onclick="clearMulti('leagSel');return false;">clear</a></div>
+      <select id="leagSel" multiple class="form-select form-select-sm" size="5" onchange="recompute()">
+        ${leagues.map(l => `<option value="${escapeAttr(l)}">${l}</option>`).join('')}
+      </select>
+    </div>`;
+}
+
+function clearMulti(id) {
+  [...document.getElementById(id).options].forEach(o => o.selected=false);
+  recompute();
+}
+
+// alert_date is "YYYY-MM-DD HH:MM:SS" — the first 10 chars sort and compare
+// directly against an <input type="date"> value (also "YYYY-MM-DD").
+function rowDate(r) { return String(r.alert_date || '').slice(0, 10); }
+
+// Whole-day gap between two alert_date strings (date portion only). null if
+// either is missing/unparseable.
+function dayDiff(a, b) {
+  const da = Date.parse(String(a || '').slice(0, 10));
+  const db = Date.parse(String(b || '').slice(0, 10));
+  if (isNaN(da) || isNaN(db)) return null;
+  return Math.round((db - da) / 86400000);
+}
+
+function dateInRange(r) {
+  const from = document.getElementById('dateFrom')?.value;
+  const to   = document.getElementById('dateTo')?.value;
+  if (!from && !to) return true;
+  const d = rowDate(r);
+  if (!d) return false;
+  if (from && d < from) return false;
+  if (to && d > to) return false;
+  return true;
+}
+
+function clearDates() {
+  const f = document.getElementById('dateFrom'), t = document.getElementById('dateTo');
+  if (f) f.value = ''; if (t) t.value = '';
+  recompute();
+}
+
+function escapeAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+function resetFilters() {
+  Object.entries(FILTER_STATE).forEach(([f,s]) => {
+    s.min = s.realMin; s.max = s.realMax;
+    const a = document.getElementById('min_'+f), b = document.getElementById('max_'+f);
+    if (a) a.value = s.realMin; if (b) b.value = s.realMax;
+    const lbl = document.getElementById('lbl_'+f);
+    if (lbl) {
+      const step = SLIDERS.find(x=>x[0]===f)?.[3] ?? 1;
+      const fmt = step < 1 ? 2 : 0;
+      lbl.textContent = `${s.realMin.toFixed(fmt)} – ${s.realMax.toFixed(fmt)}`;
+    }
+  });
+  const df = document.getElementById('dateFrom'), dt = document.getElementById('dateTo');
+  if (df) df.value = ''; if (dt) dt.value = '';
+  clearMulti('regSel'); clearMulti('leagSel');
+}
+
+// =================== Filtering & PnL ===================
+// Strategy selection is now per bet-type (per market card), so the row-level
+// filter no longer gates on strategy — only the shared date / region / league /
+// slider filters. Each market applies its own strategy set downstream.
+function passesFilters(r) {
+  if (!dateInRange(r)) return false;
+  const regs = [...document.getElementById('regSel')?.selectedOptions||[]].map(o=>o.value);
+  const leags = [...document.getElementById('leagSel')?.selectedOptions||[]].map(o=>o.value);
+  if (regs.length && !regs.includes(r.region)) return false;
+  if (leags.length && !leags.includes(r.league)) return false;
+  for (const [field, s] of Object.entries(FILTER_STATE)) {
+    if (s.min === s.realMin && s.max === s.realMax) continue;
+    const v = parseFloat(r.data[field]);
+    if (!isFinite(v)) return false;
+    if (v < s.min || v > s.max) return false;
+  }
+  return true;
+}
+
+// A game is identified by DATE + home + away. alert_date is a full timestamp
+// ("YYYY-MM-DD HH:MM:SS") that differs per strategy for the same fixture, so the
+// key uses the date portion only. The live app triggers a fixture once, so when
+// MORE THAN ONE strategy is in play the same game across strategy files counts
+// once — kept copy follows the fixed strategy hierarchy (Boost → Main Home →
+// Main Away → Back Up Boost via stratRank); earliest alert_date / minute is the
+// tiebreak within the same rank. A single strategy on its own is returned
+// untouched, so selecting it alone still includes every one of its alerts.
+function gameKey(r) {
+  const norm = s => String(s ?? '').trim().toLowerCase();
+  return `${rowDate(r)}|${norm(r.home_team)}|${norm(r.away_team)}`;
+}
+// true if `a` outranks `b` for the dedupe keep decision: higher strategy in the
+// hierarchy wins; same rank falls back to earliest real-time alert.
+function triggeredFirst(a, b) {
+  const ra = stratRank(a.strategy), rb = stratRank(b.strategy);
+  if (ra !== rb) return ra < rb;
+  const ad = String(a.alert_date || ''), bd = String(b.alert_date || '');
+  if (ad !== bd) return ad < bd;
+  const at = (a.timer == null) ? Infinity : a.timer;
+  const bt = (b.timer == null) ? Infinity : b.timer;
+  return at < bt;
+}
+function dedupeGames(rows) {
+  if (new Set(rows.map(r => r.strategy)).size <= 1) return rows;
+  const best = new Map();
+  for (const r of rows) {
+    const k = gameKey(r);
+    const cur = best.get(k);
+    if (!cur || triggeredFirst(r, cur)) best.set(k, r);
+  }
+  const keep = new Set(best.values());
+  return rows.filter(r => keep.has(r));   // preserve original order
+}
+
+// Risk / robustness stats. Computed from the cumulative P&L stream so they
+// work for any staking scheme (flat, % of bank, Kelly):
+//  - maxDD: true peak-to-trough drawdown of the running P&L curve.
+//  - maxDDUnits: longest run of consecutive losing bets (count, not £).
+//  - recovBets/recovDays: from the trough of the worst drawdown, how many
+//    bets / calendar days until cumulative P&L climbs back to its prior peak.
+//    null = never recovered by the end of the data.
+//  - profitFactor: gross wins ÷ gross losses (>1 = edge; higher = sturdier).
+// Commission is applied only to winnings (handled upstream in runStakedPnL),
+// so a loss is exactly −stake.
+function riskMetrics(cum) {
+  let grossWin = 0, grossLoss = 0, prev = 0;
+  let bestLossStreak = 0, curLossStreak = 0;
+  let peak = 0, peakIdx = -1;
+  let maxDD = 0, ddPeakIdx = -1, ddTroughIdx = -1;
+  for (let i = 0; i < cum.length; i++) {
+    const delta = cum[i].pnl - prev; prev = cum[i].pnl;
+    if (delta >= 0) grossWin += delta; else grossLoss += -delta;
+    if (delta < 0) {
+      curLossStreak++;
+      if (curLossStreak > bestLossStreak) bestLossStreak = curLossStreak;
+    } else {
+      curLossStreak = 0;
+    }
+    if (cum[i].pnl > peak) { peak = cum[i].pnl; peakIdx = i; }
+    const dd = peak - cum[i].pnl;
+    if (dd > maxDD) { maxDD = dd; ddPeakIdx = peakIdx; ddTroughIdx = i; }
+  }
+  // Recovery: from the trough forward, until P&L is back at the prior peak.
+  let recovBets = null, recovDays = null;
+  if (ddTroughIdx >= 0) {
+    const target = ddPeakIdx >= 0 ? cum[ddPeakIdx].pnl : 0;
+    for (let j = ddTroughIdx + 1; j < cum.length; j++) {
+      if (cum[j].pnl >= target) {
+        recovBets = j - ddTroughIdx;
+        recovDays = dayDiff(cum[ddTroughIdx].date, cum[j].date);
+        if (recovDays != null && recovDays < 0) recovDays = 0;
+        break;
+      }
+    }
+  }
+  return {
+    maxDD,
+    maxDDUnits: bestLossStreak,
+    recovBets, recovDays,
+    profitFactor: grossLoss > 0 ? grossWin / grossLoss
+                                : (grossWin > 0 ? Infinity : 0),
+  };
+}
+
+// Normalise any alert_date string to a date-only key for "same day" comparison
+// (handles YYYY-MM-DD as well as YYYY-MM-DD HH:MM:SS).
+function dateKey(d) { return String(d || '').slice(0, 10); }
+
+// Hard cap on the daily stake under % of bank mode. Protects against runaway
+// stakes once the bank has compounded into the thousands.
+const PCT_BANK_DAILY_CAP = 100;
+
+// Build a staking config from the UI controls. Pure read — does not mutate.
+// Legacy helper — returns the FIRST enabled market's cfg so any older code that
+// still hands a single staking config into the engine works against one market.
+// Real driver of the page is getMarketsConfig() (per-market).
+function getStakingConfig() {
+  const mcfg = getMarketsConfig();
+  const firstKey = Object.keys(mcfg.markets).find(k => mcfg.markets[k].enabled);
+  if (firstKey) return mcfg.markets[firstKey].cfg;
+  return { mode: 'flat', commPct: mcfg.commPct, stake: 1, label: 'Flat £1.00/bet' };
+}
+
+// No-op: the old global stake-mode dropdown is gone; kept so any stray HTML
+// onchange="onStakeModeChange()" attributes (in cached pages) don't error.
+function onStakeModeChange() { recompute(); }
+
+// Core staking + P&L engine. Takes an array of expanded bets
+// ({r, m, odds, alert_date}) already in chronological order, plus a staking
+// cfg and a win predicate. Produces:
+//   - bets / wins / hitRate / avgOdds / stake (£ total staked) / pnl / roi
+//   - maxWin / maxLoss streaks and risk metrics from cum series
+//   - cum: [{date, pnl, stake}] for chart + downstream consumers
+//   - betsDetail: full per-bet stream {r, m, odds, stake, won, pnl, cum, date}
+//     used by renderRows + the Excel exports so the per-row stake reflects the
+//     actual staking scheme (including £0 skipped Kelly bets, which are
+//     omitted from this list entirely).
+//   - startingBank / endingBank: only set for bank-based modes; null for flat.
+//   - kellyP / skipped: Kelly diagnostics.
+// Commission is applied to *winnings only*; losses cost exactly −stake.
+function runStakedPnL(expanded, cfg, isWin) {
+  // Kelly needs p (win probability). Use the filtered dataset's overall
+  // realised hit-rate as a stationary proxy. Computed up front so the loop
+  // can use a constant p; pre-pass also primes `wins` and `bets` for Kelly's
+  // skipped-bet bookkeeping.
+  let kellyP = null;
+  if (cfg.mode === 'kelly') {
+    let w = 0, n = 0;
+    for (const b of expanded) { n++; if (isWin(b)) w++; }
+    kellyP = n ? w / n : 0;
+  }
+
+  let bets = 0, wins = 0, stakeSum = 0, oddsSum = 0, oddsN = 0;
+  let curWinStreak = 0, curLossStreak = 0, maxWin = 0, maxLoss = 0;
+  const cum = []; const betsDetail = [];
+  let running = 0;
+  let lastDayKey = null, dailyStake = 0;
+  let skipped = 0;
+  let cappedDays = 0;
+
+  for (const b of expanded) {
+    const dk = dateKey(b.alert_date);
+    let stake;
+    if (cfg.mode === 'pctBank') {
+      if (dk !== lastDayKey) {
+        const curBank = cfg.startingBank + running;
+        const raw = curBank > 0 ? curBank * cfg.pct / 100 : 0;
+        const cap = (cfg.cap != null) ? cfg.cap : PCT_BANK_DAILY_CAP;
+        dailyStake = Math.min(raw, cap);
+        if (raw > cap) cappedDays++;
+        lastDayKey = dk;
+      }
+      stake = dailyStake;
+    } else if (cfg.mode === 'kelly') {
+      const curBank = cfg.startingBank + running;
+      const bVal = b.odds - 1;
+      const f = bVal > 0 ? (bVal * kellyP - (1 - kellyP)) / bVal : 0;
+      stake = (curBank > 0 && f > 0) ? curBank * cfg.kellyFrac * f : 0;
+    } else {
+      stake = cfg.stake;
+    }
+    // Round to whole pence so the engine matches real Betfair placement and
+    // the displayed stake is the same one used in the P&L calc.
+    stake = Math.round(stake * 100) / 100;
+    if (!(stake > 0)) { skipped++; continue; }
+
+    bets++;
+    stakeSum += stake;
+    oddsSum += b.odds; oddsN++;
+    const won = isWin(b);
+    let betPnl;
+    if (won) {
+      // Commission is charged ONLY on net winnings, never on losses.
+      const gross = stake * (b.odds - 1);
+      betPnl = gross * (1 - cfg.commPct / 100);
+      running += betPnl;
+      wins++;
+      curWinStreak++; maxWin = Math.max(maxWin, curWinStreak);
+      curLossStreak = 0;
+    } else {
+      betPnl = -stake;
+      running += betPnl;
+      curLossStreak++; maxLoss = Math.max(maxLoss, curLossStreak);
+      curWinStreak = 0;
+    }
+    cum.push({date: b.alert_date, pnl: running, stake});
+    betsDetail.push({r: b.r, m: b.m, odds: b.odds, stake, won, pnl: betPnl, cum: running, date: b.alert_date});
+  }
+
+  const isBankMode = (cfg.mode === 'pctBank' || cfg.mode === 'kelly');
+  return {
+    bets, wins,
+    hitRate: bets ? wins/bets : 0,
+    stake: stakeSum,
+    pnl: running,
+    roi: stakeSum ? running/stakeSum : 0,
+    avgOdds: oddsN ? oddsSum/oddsN : 0,
+    maxWin, maxLoss,
+    skipped,
+    cappedDays,
+    kellyP,
+    startingBank: isBankMode ? cfg.startingBank : null,
+    endingBank: isBankMode ? cfg.startingBank + running : null,
+    ...riskMetrics(cum),
+    cum,
+    betsDetail,
+  };
+}
+
+// Per-market simulator: each enabled market runs as its OWN bank with its OWN
+// staking strategy. Returns the same shape as the legacy multi-market sim
+// (so all the downstream renderers keep working) PLUS:
+//   - marketSummary: { priceField: {label, bets, won, lost, stake, pnl, startingBank, endingBank, betsDetail} }
+//   - dailyBreakdown: [{date, bets, won, lost, staked, pnl, start_bank, end_bank, markets: {...}}]
+//   - matches: distinct match count across all enabled markets
+// Rows that feed one market: keep only the strategies ticked on that market's
+// card, then dedupe games WITHIN that strategy set (so a fixture triggered by
+// several of the market's strategies counts once). When `ignoreStrategies` is
+// true (per-strategy comparison / what-if export sheets) every row is used and
+// only cross-strategy dedupe applies.
+function rowsForMarket(rows, mcfg, k, ignoreStrategies) {
+  let rs = rows;
+  if (!ignoreStrategies) {
+    const set = new Set(mcfg.markets[k].strategies || []);
+    rs = rows.filter(r => set.has(r.strategy));
+  }
+  return dedupeGames(rs);
+}
+
+function computePnLPerMarket(rows, mcfg, ignoreStrategies) {
+  const enabledKeys = Object.keys(mcfg.markets).filter(k => mcfg.markets[k].enabled);
+  if (!enabledKeys.length) {
+    return Object.assign(emptyPnLResult(), {marketSummary: {}, dailyBreakdown: [], matches: 0});
+  }
+
+  const perMarket = {};
+  for (const k of enabledKeys) {
+    perMarket[k] = computePnL(rowsForMarket(rows, mcfg, k, ignoreStrategies), k, mcfg.markets[k].cfg);
+  }
+
+  // Combined chronological bet stream (each bet tagged with its market)
+  const all = [];
+  for (const k of enabledKeys) {
+    for (const b of perMarket[k].betsDetail) all.push({...b, marketKey: k});
+  }
+  all.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  let bets = 0, wins = 0, stakeSum = 0, oddsSum = 0, oddsN = 0, pnl = 0;
+  let curWinStreak = 0, curLossStreak = 0, maxWin = 0, maxLoss = 0;
+  let skipped = 0, cappedDays = 0;
+  for (const k of enabledKeys) {
+    skipped += perMarket[k].skipped || 0;
+    cappedDays += perMarket[k].cappedDays || 0;
+  }
+
+  const cum = [];
+  for (const b of all) {
+    bets++;
+    stakeSum += b.stake;
+    oddsSum += b.odds; oddsN++;
+    pnl += b.pnl;
+    if (b.won) { wins++; curWinStreak++; maxWin = Math.max(maxWin, curWinStreak); curLossStreak = 0; }
+    else       { curLossStreak++; maxLoss = Math.max(maxLoss, curLossStreak); curWinStreak = 0; }
+    cum.push({date: b.date, pnl, stake: b.stake});
+  }
+
+  let startingBank = 0, endingBank = 0;
+  for (const k of enabledKeys) {
+    startingBank += perMarket[k].startingBank ?? mcfg.markets[k].cfg.startingBank ?? 0;
+    endingBank   += perMarket[k].endingBank   ?? ((perMarket[k].startingBank ?? mcfg.markets[k].cfg.startingBank ?? 0) + perMarket[k].pnl);
+  }
+
+  // Matches = distinct (date|home|away) keys across all bet streams.
+  const matchSet = new Set();
+  for (const b of all) matchSet.add(gameKey(b.r));
+
+  // Per-day breakdown: for each market, walk its chronological bets and track
+  // the running bank so the day rows reflect the per-market evolution.
+  const daily = {};
+  for (const k of enabledKeys) {
+    const startBank = perMarket[k].startingBank ?? mcfg.markets[k].cfg.startingBank ?? 0;
+    let runBank = startBank;
+    let lastDk = null;
+    for (const b of perMarket[k].betsDetail) {
+      const dk = String(b.date || '').slice(0, 10);
+      if (!daily[dk]) daily[dk] = { markets: {} };
+      let md = daily[dk].markets[k];
+      if (!md) {
+        md = daily[dk].markets[k] = {
+          label: mcfg.markets[k].label,
+          bets: 0, won: 0, lost: 0,
+          staked: 0, pnl: 0,
+          start_bank: runBank, end_bank: runBank,
+          stake_per_bet: 0,
+          bets_detail: [],
+        };
+      }
+      md.bets++;
+      md.staked += b.stake;
+      md.pnl += b.pnl;
+      if (b.won) md.won++; else md.lost++;
+      runBank += b.pnl;
+      md.end_bank = runBank;
+      md.stake_per_bet = md.bets ? md.staked / md.bets : 0;
+      md.bets_detail.push(b);
+      lastDk = dk;
+    }
+  }
+
+  const dailyBreakdown = Object.entries(daily)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, d]) => {
+      const out = {date, bets:0, won:0, lost:0, staked:0, pnl:0, start_bank:0, end_bank:0, markets: d.markets};
+      Object.values(d.markets).forEach(md => {
+        out.bets += md.bets; out.won += md.won; out.lost += md.lost;
+        out.staked += md.staked; out.pnl += md.pnl;
+        out.start_bank += md.start_bank; out.end_bank += md.end_bank;
+      });
+      return out;
+    });
+
+  const marketSummary = {};
+  for (const k of enabledKeys) {
+    const p = perMarket[k];
+    marketSummary[k] = {
+      key: k,
+      label: mcfg.markets[k].label,
+      bets: p.bets, wins: p.wins, lost: p.bets - p.wins - (p.skipped||0),
+      stake: p.stake, pnl: p.pnl, roi: p.roi,
+      startingBank: p.startingBank ?? mcfg.markets[k].cfg.startingBank ?? 0,
+      endingBank: p.endingBank ?? ((p.startingBank ?? mcfg.markets[k].cfg.startingBank ?? 0) + p.pnl),
+      mode: mcfg.markets[k].cfg.mode,
+      label_strategy: mcfg.markets[k].cfg.label,
+    };
+  }
+
+  return Object.assign({
+    bets, wins,
+    hitRate: bets ? wins / bets : 0,
+    stake: stakeSum,
+    pnl,
+    roi: stakeSum ? pnl / stakeSum : 0,
+    avgOdds: oddsN ? oddsSum / oddsN : 0,
+    maxWin, maxLoss,
+    skipped, cappedDays,
+    kellyP: null,
+    startingBank, endingBank,
+    cum, betsDetail: all,
+  }, riskMetrics(cum), { marketSummary, dailyBreakdown, matches: matchSet.size });
+}
+
+// Shared-bank simulator: every enabled market's qualifying bets are merged into
+// one chronological stream and staked from a SINGLE common bank. Returns the
+// same shape as computePnLPerMarket so all downstream renderers keep working;
+// per-market banks are not meaningful here, so marketSummary banks are null and
+// the daily table's bank columns track the one shared bank.
+function computePnLSharedBank(rows, mcfg, sharedCfg, ignoreStrategies) {
+  const enabledKeys = Object.keys(mcfg.markets).filter(k => mcfg.markets[k].enabled);
+  if (!enabledKeys.length) {
+    return Object.assign(emptyPnLResult(), {marketSummary: {}, dailyBreakdown: [], matches: 0});
+  }
+
+  // Expand each enabled market's bets, honouring that market's own strategy set
+  // + odds range, then merge chronologically so the shared bank evolves across
+  // all markets.
+  const expanded = [];
+  for (const k of enabledKeys) {
+    const mc = mcfg.markets[k].cfg;
+    for (const r of rowsForMarket(rows, mcfg, k, ignoreStrategies)) {
+      const odds = parseFloat(r.data[k]);
+      if (!isFinite(odds) || odds <= 1) continue;
+      if (mc.oddsMin != null && odds < mc.oddsMin) continue;
+      if (mc.oddsMax != null && odds > mc.oddsMax) continue;
+      expanded.push({r, m: k, odds, alert_date: r.alert_date});
+    }
+  }
+  expanded.sort((a, b) => String(a.alert_date || '').localeCompare(String(b.alert_date || '')));
+
+  const commPct = sharedCfg.commPct || 0;
+  const startBank = sharedCfg.startingBank ?? 0;
+
+  // Single staking loop over the merged stream. Each bet sizes its stake by its
+  // OWN market's rule (flat £ or % of bank), but the % is taken from — and every
+  // result is fed back into — the one shared running bank. % of bank keeps the
+  // per-market daily lock: a market's stake for a day is fixed from the shared
+  // bank at that market's first bet of the day.
+  let bets = 0, wins = 0, stakeSum = 0, oddsSum = 0, oddsN = 0;
+  let curWinStreak = 0, curLossStreak = 0, maxWin = 0, maxLoss = 0;
+  let running = 0, skipped = 0, cappedDays = 0;
+  const cum = [], all = [];
+  const lastDay = {}, dailyStake = {};
+
+  for (const b of expanded) {
+    const cfg = mcfg.markets[b.m].cfg;
+    const dk = dateKey(b.alert_date);
+    let stake;
+    if (cfg.mode === 'pctBank') {
+      if (lastDay[b.m] !== dk) {
+        const curBank = startBank + running;
+        const raw = curBank > 0 ? curBank * cfg.pct / 100 : 0;
+        const cap = (cfg.cap != null) ? cfg.cap : PCT_BANK_DAILY_CAP;
+        dailyStake[b.m] = Math.min(raw, cap);
+        if (raw > cap) cappedDays++;
+        lastDay[b.m] = dk;
+      }
+      stake = dailyStake[b.m];
+    } else {
+      stake = cfg.stake;
+    }
+    stake = Math.round(stake * 100) / 100;
+    if (!(stake > 0)) { skipped++; continue; }
+
+    bets++; stakeSum += stake; oddsSum += b.odds; oddsN++;
+    const won = effectiveStrike(b.m, b.r);
+    let betPnl;
+    if (won) {
+      const gross = stake * (b.odds - 1);
+      betPnl = gross * (1 - commPct / 100);
+      running += betPnl; wins++;
+      curWinStreak++; maxWin = Math.max(maxWin, curWinStreak); curLossStreak = 0;
+    } else {
+      betPnl = -stake; running += betPnl;
+      curLossStreak++; maxLoss = Math.max(maxLoss, curLossStreak); curWinStreak = 0;
+    }
+    cum.push({date: b.alert_date, pnl: running, stake});
+    all.push({r: b.r, m: b.m, marketKey: b.m, odds: b.odds, stake, won, pnl: betPnl, cum: running, date: b.alert_date});
+  }
+
+  const s = {
+    bets, wins,
+    hitRate: bets ? wins / bets : 0,
+    stake: stakeSum, pnl: running,
+    roi: stakeSum ? running / stakeSum : 0,
+    avgOdds: oddsN ? oddsSum / oddsN : 0,
+    maxWin, maxLoss, skipped, cappedDays, kellyP: null,
+    cum,
+  };
+
+  // Per-market aggregates (P&L/bets only — no separate bank per market).
+  const marketSummary = {};
+  for (const k of enabledKeys) {
+    marketSummary[k] = {
+      key: k, label: mcfg.markets[k].label,
+      bets: 0, wins: 0, lost: 0, stake: 0, pnl: 0, roi: 0,
+      startingBank: null, endingBank: null,
+      mode: mcfg.markets[k].cfg.mode, label_strategy: mcfg.markets[k].cfg.label, shared: true,
+    };
+  }
+  for (const b of all) {
+    const ms = marketSummary[b.marketKey];
+    if (!ms) continue;
+    ms.bets++; ms.stake += b.stake; ms.pnl += b.pnl;
+    if (b.won) ms.wins++; else ms.lost++;
+  }
+  for (const k of enabledKeys) {
+    const ms = marketSummary[k];
+    ms.roi = ms.stake ? ms.pnl / ms.stake : 0;
+  }
+
+  // Daily breakdown: one shared bank walked chronologically across all markets.
+  const daily = {};
+  const dayOrder = [];
+  let runBank = startBank;
+  for (const b of all) {
+    const dk = String(b.date || '').slice(0, 10);
+    if (!daily[dk]) { daily[dk] = { start_bank: runBank, end_bank: runBank, markets: {} }; dayOrder.push(dk); }
+    let md = daily[dk].markets[b.marketKey];
+    if (!md) {
+      md = daily[dk].markets[b.marketKey] = {
+        label: mcfg.markets[b.marketKey].label,
+        bets: 0, won: 0, lost: 0, staked: 0, pnl: 0,
+        start_bank: runBank, end_bank: runBank, stake_per_bet: 0, bets_detail: [],
+      };
+    }
+    md.bets++; md.staked += b.stake; md.pnl += b.pnl;
+    if (b.won) md.won++; else md.lost++;
+    runBank += b.pnl;
+    md.end_bank = runBank;
+    md.stake_per_bet = md.bets ? md.staked / md.bets : 0;
+    md.bets_detail.push(b);
+    daily[dk].end_bank = runBank;
+  }
+
+  const dailyBreakdown = dayOrder.map(dk => {
+    const d = daily[dk];
+    const out = {date: dk, bets: 0, won: 0, lost: 0, staked: 0, pnl: 0,
+                 start_bank: d.start_bank, end_bank: d.end_bank, markets: d.markets};
+    Object.values(d.markets).forEach(md => {
+      out.bets += md.bets; out.won += md.won; out.lost += md.lost;
+      out.staked += md.staked; out.pnl += md.pnl;
+    });
+    return out;
+  });
+
+  const matchSet = new Set();
+  for (const b of all) matchSet.add(gameKey(b.r));
+
+  return Object.assign({}, s, riskMetrics(cum), {
+    startingBank: startBank,
+    endingBank: startBank + s.pnl,
+    cum: s.cum,
+    betsDetail: all,
+    marketSummary, dailyBreakdown, matches: matchSet.size,
+  });
+}
+
+function emptyPnLResult() {
+  return {
+    bets: 0, wins: 0, hitRate: 0,
+    stake: 0, pnl: 0, roi: 0, avgOdds: 0,
+    maxWin: 0, maxLoss: 0,
+    skipped: 0, cappedDays: 0, kellyP: null,
+    startingBank: 0, endingBank: 0,
+    cum: [], betsDetail: [],
+    maxDD: 0, maxDDUnits: 0, recovBets: null, recovDays: null, profitFactor: 0,
+  };
+}
+
+// Legacy entry — anything that still calls computePnLMulti(rows, markets, cfg)
+// is routed through the per-market sim using the live UI config (the explicit
+// `markets` arg is ignored; the enabled-cards are the source of truth).
+// Pass ignoreStrategies=true to run the supplied rows against EVERY enabled
+// market regardless of each market's strategy ticks (used by the per-strategy
+// comparison and what-if export sheets).
+function computePnLMulti(rows, markets, cfg, ignoreStrategies) {
+  const mcfg = getMarketsConfig();
+  return getBankMode() === 'shared'
+    ? computePnLSharedBank(rows, mcfg, getSharedConfig(), ignoreStrategies)
+    : computePnLPerMarket(rows, mcfg, ignoreStrategies);
+}
+
+function computePnL(rows, priceField, cfg) {
+  const expanded = [];
+  for (const r of rows) {
+    const odds = parseFloat(r.data[priceField]);
+    if (!isFinite(odds) || odds <= 1) continue;
+    if (cfg.oddsMin != null && odds < cfg.oddsMin) continue;
+    if (cfg.oddsMax != null && odds > cfg.oddsMax) continue;
+    expanded.push({r, m: priceField, odds, alert_date: r.alert_date});
+  }
+  expanded.sort((a, b) => String(a.alert_date || '').localeCompare(String(b.alert_date || '')));
+  return runStakedPnL(expanded, cfg, (b) => effectiveStrike(b.m, b.r));
+}
+
+// =================== Edge finder ===================
+function bucketize(values, field, nQuantiles) {
+  // numeric: nQuantiles quantile bins; categorical: top values.
+  // Each bucket carries the info needed to apply it as a filter later.
+  const n = Math.max(2, nQuantiles || 3);
+  const nums = values.map(v => parseFloat(v)).filter(v => isFinite(v));
+  if (nums.length > values.length * 0.7) {
+    const sorted = nums.slice().sort((a,b)=>a-b);
+    const cuts = [];
+    for (let i = 1; i < n; i++) cuts.push(sorted[Math.floor(sorted.length * i / n)]);
+    const buckets = [];
+    let prev = -Infinity;
+    for (let i = 0; i < cuts.length; i++) {
+      const lo = prev, hi = cuts[i];
+      const lbl = lo === -Infinity ? `≤ ${fmt(hi)}` : `${fmt(lo)}–${fmt(hi)}`;
+      buckets.push({label:lbl, kind:'num', low:lo, high:hi});
+      prev = hi;
+    }
+    buckets.push({label:`> ${fmt(prev)}`, kind:'num', low:prev, high:Infinity});
+    return {kind:'num', buckets};
+  } else {
+    const counts = {};
+    values.forEach(v => { if (v==null || v==='') return; counts[v] = (counts[v]||0)+1; });
+    const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]);
+    return {kind:'cat', buckets: top.map(t => ({label:t, kind:'cat', value:t}))};
+  }
+}
+function fmt(v) { return Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2); }
+
+const EDGE_FEATURES = [
+  'md_timer','md_home_pos','md_away_pos',
+  'alert_score_diff','alert_xg_diff','alert_momentum_diff',
+  'alert_h_xg','alert_a_xg','alert_h_sot','alert_a_sot',
+  'alert_h_poss_pct','alert_h_attacks','alert_a_attacks',
+  'alert_h_corners','alert_a_corners',
+  'live_3way_home','live_3way_away','live_over_2_5_goals','live_under_2_5_goals',
+  'region','league',
+];
+
+function edgeFinder(filtered, markets, cfg, baseline) {
+  const results = [];
+  for (const f of EDGE_FEATURES) {
+    const values = filtered.map(r => r.data[f] ?? r[f]);
+    if (!values.length) continue;
+    const buck = bucketize(values, f);
+    if (buck.kind === 'num') {
+      buck.buckets.forEach(b => {
+        const grp = filtered.filter(r => {
+          const v = parseFloat(r.data[f] ?? r[f]);
+          if (!isFinite(v)) return false;
+          return v >= b.low && v <= b.high;
+        });
+        evalBucket(results, f, b, grp, markets, cfg, baseline);
+      });
+    } else {
+      buck.buckets.forEach(b => {
+        const grp = filtered.filter(r => (r.data[f] ?? r[f]) == b.value);
+        evalBucket(results, f, b, grp, markets, cfg, baseline);
+      });
+    }
+  }
+  return results
+    .filter(r => r.n >= 6)
+    .sort((a,b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 15);
+}
+
+function evalBucket(out, feature, bucket, grp, markets, cfg, baseline) {
+  if (!grp.length) return;
+  const s = computePnLMulti(grp, markets, cfg);
+  if (!s.bets) return;
+  out.push({
+    feature, bucket, label: bucket.label, n: s.bets,
+    hit: s.hitRate, delta: s.hitRate - baseline,
+    avgOdds: s.avgOdds, pnl: s.pnl, roi: s.roi,
+  });
+}
+
+// =================== Render ===================
+function recompute() {
+  const mcfg = getMarketsConfig();
+  const enabledKeys = Object.keys(mcfg.markets).filter(k => mcfg.markets[k].enabled);
+  // Rows passing the shared filters (date/region/league/sliders) — strategy
+  // selection and dedupe now happen per-market inside the compute functions.
+  const filtered = ALL_ROWS.filter(passesFilters);
+  document.getElementById('filterMatchCount').textContent = `${filtered.length} of ${ALL_ROWS.length} rows`;
+  document.getElementById('tableCount').textContent = `(${filtered.length})`;
+
+  const sharedMode = getBankMode() === 'shared';
+  const sharedCfg = sharedMode ? getSharedConfig() : null;
+
+  const note = document.getElementById('marketNote');
+  if (note) {
+    if (!enabledKeys.length) {
+      note.innerHTML = `<span class="text-warning">No market enabled.</span> Enable at least one market card below.`;
+    } else {
+      const labels = enabledKeys.map(k => mcfg.markets[k].label);
+      note.innerHTML = sharedMode
+        ? `Running <strong>1 shared bank</strong> across <strong>${enabledKeys.length}</strong> market(s) (${labels.join(', ')}). Win/Loss recomputed from FT score per market.`
+        : `Running <strong>${enabledKeys.length}</strong> independent banks (${labels.join(', ')}). Win/Loss recomputed from FT score per market.`;
+    }
+  }
+  const optLbl = document.getElementById('optMarketLbl');
+  if (optLbl) {
+    optLbl.textContent = enabledKeys.length === 1
+      ? mcfg.markets[enabledKeys[0]].label
+      : `${enabledKeys.length}-market basket`;
+  }
+
+  const s = sharedMode
+    ? computePnLSharedBank(filtered, mcfg, sharedCfg)
+    : computePnLPerMarket(filtered, mcfg);
+
+  // Bank banner: single shared bank delta, or per-market bank deltas.
+  const stakeNote = document.getElementById('stakeNote');
+  if (stakeNote) {
+    if (!enabledKeys.length) {
+      stakeNote.innerHTML = '';
+    } else if (sharedMode) {
+      const delta = s.endingBank - s.startingBank;
+      const cls = delta >= 0 ? 'text-success' : 'text-danger';
+      const extra = (s.cappedDays ? ` · <span class="text-warning">cap hit ${s.cappedDays}×</span>` : '')
+                  + (s.skipped ? ` · ${s.skipped} bet(s) skipped` : '');
+      stakeNote.innerHTML = `<i class="fas fa-piggy-bank me-1"></i><strong>Shared bank</strong>: £${s.startingBank.toFixed(2)} → <span class="${cls}">£${s.endingBank.toFixed(2)}</span> (${delta>=0?'+':'-'}£${Math.abs(delta).toFixed(2)})` + extra;
+    } else {
+      const parts = enabledKeys.map(k => {
+        const ms = s.marketSummary[k];
+        const delta = ms.endingBank - ms.startingBank;
+        const cls = delta >= 0 ? 'text-success' : 'text-danger';
+        return `<strong>${ms.label}</strong>: £${ms.startingBank.toFixed(2)} → <span class="${cls}">£${ms.endingBank.toFixed(2)}</span> (${delta>=0?'+':'-'}£${Math.abs(delta).toFixed(2)})`;
+      });
+      const extra = (s.cappedDays ? ` · <span class="text-warning">cap hit ${s.cappedDays}× across markets</span>` : '')
+                  + (s.skipped ? ` · ${s.skipped} bet(s) skipped` : '');
+      stakeNote.innerHTML = `<i class="fas fa-piggy-bank me-1"></i>` + parts.join(' &nbsp;·&nbsp; ') + extra;
+    }
+  }
+
+  // Per-market badge updates
+  SIM_MARKETS_STRAT.forEach(m => {
+    const badge = document.querySelector('.mkt-pnl-badge[data-mkt="' + m.key + '"]');
+    if (!badge) return;
+    const ms = s.marketSummary[m.key];
+    if (!ms) {
+      badge.textContent = '–';
+      badge.className = 'badge bg-light text-dark mkt-pnl-badge';
+    } else {
+      badge.textContent = (ms.pnl >= 0 ? '+' : '') + '£' + ms.pnl.toFixed(2);
+      badge.className = 'badge mkt-pnl-badge ' + (ms.pnl >= 0 ? 'bg-success' : 'bg-danger');
+    }
+  });
+
+  document.getElementById('kBets').textContent = s.bets;
+  const matchesEl = document.getElementById('kMatches');
+  if (matchesEl) matchesEl.textContent = s.matches != null ? s.matches : 0;
+  document.getElementById('kHit').textContent = pct(s.hitRate);
+  document.getElementById('kStake').textContent = '£'+s.stake.toFixed(2);
+  document.getElementById('kReturn').textContent = '£'+(s.pnl + s.stake).toFixed(2);
+  const pnlEl = document.getElementById('kPnl');
+  pnlEl.textContent = (s.pnl>=0?'+£':'-£') + Math.abs(s.pnl).toFixed(2);
+  pnlEl.className = s.pnl>=0 ? 'text-success' : 'text-danger';
+  document.getElementById('kRoi').textContent = pct(s.roi);
+  document.getElementById('kAvgOdds').textContent = s.avgOdds ? s.avgOdds.toFixed(2) : '–';
+  document.getElementById('kStreak').textContent = `${s.maxWin} / ${s.maxLoss}`;
+
+  const ddEl = document.getElementById('kMaxDD');
+  ddEl.textContent = s.maxDD > 0 ? '-£'+s.maxDD.toFixed(2) : '£0.00';
+  ddEl.className = s.maxDD > 0 ? 'text-danger' : '';
+  document.getElementById('kMaxDDUnits').textContent =
+    s.maxDDUnits > 0 ? s.maxDDUnits + ' bets' : '0 bets';
+  const recEl = document.getElementById('kRecovery');
+  if (s.recovBets == null) {
+    recEl.textContent = s.maxDD > 0 ? 'Not recovered' : '–';
+    recEl.className = s.maxDD > 0 ? 'text-danger' : '';
+  } else {
+    const days = s.recovDays == null ? '?' : s.recovDays;
+    recEl.textContent = `${s.recovBets}b · ${days}d`;
+    recEl.className = '';
+  }
+  const pfEl = document.getElementById('kPF');
+  pfEl.textContent = !isFinite(s.profitFactor) ? '∞'
+                     : (s.profitFactor ? s.profitFactor.toFixed(2) : '–');
+  pfEl.className = (s.profitFactor >= 1 || !isFinite(s.profitFactor)) ? 'text-success' : 'text-danger';
+
+  drawPnL(s.cum);
+  renderDailyTable(s.dailyBreakdown);
+  renderCompare(enabledKeys, mcfg);
+  renderEdge(filtered, enabledKeys, mcfg, s.hitRate);
+  renderRows(s.betsDetail, enabledKeys);
+}
+
+// =================== Daily breakdown (day → market → bets) ===================
+function renderDailyTable(dailyBreakdown) {
+  DAILY_DATA = dailyBreakdown || [];
+  const tbody = document.getElementById('dailyBody');
+  if (!tbody) return;
+  if (!DAILY_DATA.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted small p-3">No daily data.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = DAILY_DATA.map(day => renderDailyRow(day)).join('');
+}
+
+function renderDailyRow(day) {
+  const isOpen = !!EXPANDED_DAYS[day.date];
+  const icon = isOpen ? '−' : '+';
+  const pnlCls = day.pnl >= 0 ? 'text-success' : 'text-danger';
+  const endCls = day.end_bank > day.start_bank ? 'text-success'
+               : (day.end_bank < day.start_bank ? 'text-danger' : '');
+  let html = `<tr>
+      <td><span class="expand-btn" onclick="toggleDailyDay('${day.date}')">${icon}</span></td>
+      <td>${day.date}</td>
+      <td class="text-end">£${day.start_bank.toFixed(2)}</td>
+      <td class="text-end ${endCls}">£${day.end_bank.toFixed(2)}</td>
+      <td class="text-end">£${day.staked.toFixed(2)}</td>
+      <td class="text-end ${pnlCls}">${day.pnl>=0?'+£':'-£'}${Math.abs(day.pnl).toFixed(2)}</td>
+      <td class="text-end">${day.bets}</td>
+      <td class="text-end">${day.won}</td>
+      <td class="text-end">${day.lost}</td>
+    </tr>`;
+  if (isOpen) html += renderDailyMarketsRow(day);
+  return html;
+}
+
+function renderDailyMarketsRow(day) {
+  let inner = `<table class="table table-sm mb-0" style="background:transparent">
+      <thead><tr style="font-size:.72rem;color:#555">
+        <th style="width:30px"></th><th>Market</th>
+        <th class="text-end">Start Bank</th><th class="text-end">End Bank</th>
+        <th class="text-end">Stake/Bet</th><th class="text-end">Staked</th>
+        <th class="text-end">P&amp;L</th>
+        <th class="text-end">Bets</th><th class="text-end">Won</th><th class="text-end">Lost</th>
+      </tr></thead><tbody>`;
+  SIM_MARKETS_STRAT.forEach(m => {
+    const md = day.markets[m.key];
+    if (!md) return;
+    const openKey = day.date + '|' + m.key;
+    const open = !!EXPANDED_MARKETS[openKey];
+    const icon = open ? '−' : '+';
+    const pnlCls = md.pnl >= 0 ? 'text-success' : 'text-danger';
+    const endCls = md.end_bank > md.start_bank ? 'text-success'
+                 : (md.end_bank < md.start_bank ? 'text-danger' : '');
+    inner += `<tr>
+        <td><span class="expand-btn" onclick="toggleDailyMarket('${day.date}','${m.key}')">${icon}</span></td>
+        <td><span class="mkt-label-pill">${md.label}</span></td>
+        <td class="text-end">£${md.start_bank.toFixed(2)}</td>
+        <td class="text-end ${endCls}">£${md.end_bank.toFixed(2)}</td>
+        <td class="text-end">£${md.stake_per_bet.toFixed(2)}</td>
+        <td class="text-end">£${md.staked.toFixed(2)}</td>
+        <td class="text-end ${pnlCls}">${md.pnl>=0?'+£':'-£'}${Math.abs(md.pnl).toFixed(2)}</td>
+        <td class="text-end">${md.bets}</td>
+        <td class="text-end">${md.won}</td>
+        <td class="text-end">${md.lost}</td>
+      </tr>`;
+    if (open) inner += `<tr class="mkt-detail-row"><td></td><td colspan="9">${renderBetsTable(md.bets_detail)}</td></tr>`;
+  });
+  inner += '</tbody></table>';
+  return `<tr class="day-detail-row"><td></td><td colspan="8">${inner}</td></tr>`;
+}
+
+function renderBetsTable(bets) {
+  if (!bets || !bets.length) return '<div class="text-muted small">No bets.</div>';
+  const rows = bets.map(b => {
+    const r = b.r;
+    const won = b.won;
+    const pnlCls = b.pnl >= 0 ? 'text-success' : 'text-danger';
+    const wonBadge = won ? 'bg-success' : 'bg-danger';
+    return `<tr>
+        <td>${b.date || ''}</td>
+        <td>${r.league || ''}</td>
+        <td>${(r.home_team||'') + ' vs ' + (r.away_team||'')}</td>
+        <td class="text-end">${b.odds.toFixed(2)}</td>
+        <td class="text-end">£${b.stake.toFixed(2)}</td>
+        <td><span class="badge ${wonBadge}">${won?'Win':'Loss'}</span></td>
+        <td class="text-end ${pnlCls}">${b.pnl>=0?'+£':'-£'}${Math.abs(b.pnl).toFixed(2)}</td>
+      </tr>`;
+  }).join('');
+  return `<table class="table table-sm bets-table mb-0">
+      <thead><tr><th>Date/Time</th><th>League</th><th>Match</th><th class="text-end">Odds</th>
+        <th class="text-end">Stake</th><th>Result</th><th class="text-end">P&amp;L</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+}
+
+function toggleDailyDay(dateKey) {
+  EXPANDED_DAYS[dateKey] = !EXPANDED_DAYS[dateKey];
+  renderDailyTable(DAILY_DATA);
+}
+function toggleDailyMarket(dateKey, mkey) {
+  const k = dateKey + '|' + mkey;
+  EXPANDED_MARKETS[k] = !EXPANDED_MARKETS[k];
+  renderDailyTable(DAILY_DATA);
+}
+
+function pct(x) { return (x*100).toFixed(1) + '%'; }
+
+function drawPnL(cum) {
+  const ctx = document.getElementById('pnlChart');
+  const labels = cum.map((_,i)=>i+1);
+  const data = cum.map(c=>c.pnl);
+  if (pnlChart) pnlChart.destroy();
+  pnlChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{
+        label:'Cumulative P&L (£)',
+        data, fill:true,
+        backgroundColor:'rgba(37,99,235,0.12)',
+        borderColor:'#2563eb', borderWidth:2, pointRadius:0, tension:0.2,
+    }]},
+    options:{ scales:{ y:{ ticks:{ callback:v => '£'+v }}}, plugins:{legend:{display:false}} }
+  });
+}
+
+function renderCompare(markets, cfg) {
+  const body = document.getElementById('compareBody');
+  body.innerHTML='';
+  META.forEach(m => {
+    // Each strategy is run across ALL enabled markets, regardless of which
+    // markets actually have it ticked — this table is a standalone reference.
+    const rows = ALL_ROWS.filter(r => r.strategy===m.strategy && passesFilters(r));
+    const s = computePnLMulti(rows, markets, cfg, true);
+    const tr = document.createElement('tr');
+    const pnlCls = s.pnl>=0?'text-success':'text-danger';
+    tr.innerHTML = `<td><strong>${m.strategy}</strong></td>
+      <td class="text-end">${s.bets}</td>
+      <td class="text-end">${pct(s.hitRate)}</td>
+      <td class="text-end">${s.avgOdds?s.avgOdds.toFixed(2):'–'}</td>
+      <td class="text-end ${pnlCls}">${s.pnl>=0?'+':'-'}£${Math.abs(s.pnl).toFixed(2)}</td>
+      <td class="text-end ${pnlCls}">${pct(s.roi)}</td>`;
+    body.appendChild(tr);
+  });
+}
+function renderEdge(filtered, markets, cfg, baseline) {
+  const body = document.getElementById('edgeBody');
+  body.innerHTML='';
+  if (filtered.length < 10) { body.innerHTML = `<tr><td colspan="8" class="text-center text-muted small p-2">Need at least 10 filtered rows for edge analysis.</td></tr>`; return; }
+  if (!markets || !markets.length) { body.innerHTML = `<tr><td colspan="8" class="text-center text-muted small p-2">Tick at least one bet market.</td></tr>`; return; }
+  const insights = edgeFinder(filtered, markets, cfg, baseline);
+  if (!insights.length) { body.innerHTML = `<tr><td colspan="8" class="text-center text-muted small p-2">No clear edges in this slice.</td></tr>`; return; }
+  insights.forEach(i => {
+    const tr = document.createElement('tr');
+    const sign = i.delta>=0 ? 'badge-pos' : 'badge-neg';
+    const pnlCls = i.pnl>=0?'text-success':'text-danger';
+    tr.title = `Click to apply: ${i.feature} = ${i.label}`;
+    tr.innerHTML = `<td><code class="small">${i.feature}</code></td>
+      <td>${i.label}</td>
+      <td class="text-end">${i.n}</td>
+      <td class="text-end">${pct(i.hit)}</td>
+      <td class="text-end"><span class="badge ${sign}">${i.delta>=0?'+':''}${(i.delta*100).toFixed(1)} pp</span></td>
+      <td class="text-end">${i.avgOdds?i.avgOdds.toFixed(2):'–'}</td>
+      <td class="text-end ${pnlCls}">${i.pnl>=0?'+':'-'}£${Math.abs(i.pnl).toFixed(2)}</td>
+      <td class="text-end ${pnlCls}">${pct(i.roi)}</td>`;
+    tr.addEventListener('click', () => applyEdgeBucket(i.feature, i.bucket, tr));
+    body.appendChild(tr);
+  });
+}
+
+// Apply an edge-finder row as a filter (numeric → slider range, categorical →
+// region/league multi-select). Then recompute and flash the row.
+function applyEdgeBucket(feature, bucket, tr) {
+  if (bucket.kind === 'cat') {
+    const selId = feature === 'region' ? 'regSel' : (feature === 'league' ? 'leagSel' : null);
+    if (selId) {
+      const sel = document.getElementById(selId);
+      [...sel.options].forEach(o => { o.selected = (o.value == bucket.value); });
+    }
+  } else {
+    const state = FILTER_STATE[feature];
+    if (!state) return;            // no slider for this feature → no-op
+    let lo = bucket.low,  hi = bucket.high;
+    if (!isFinite(lo)) lo = state.realMin;
+    if (!isFinite(hi)) hi = state.realMax;
+    lo = Math.max(state.realMin, lo);
+    hi = Math.min(state.realMax, hi);
+    state.min = lo; state.max = hi;
+    const mnEl = document.getElementById('min_'+feature);
+    const mxEl = document.getElementById('max_'+feature);
+    if (mnEl) mnEl.value = lo;
+    if (mxEl) mxEl.value = hi;
+    const lbl = document.getElementById('lbl_'+feature);
+    if (lbl) {
+      const step = (SLIDERS.find(x=>x[0]===feature) || [])[3] ?? 1;
+      const fmt = step < 1 ? 2 : 0;
+      lbl.textContent = `${lo.toFixed(fmt)} – ${hi.toFixed(fmt)}`;
+    }
+  }
+  recompute();
+  if (tr) {
+    tr.classList.add('flash');
+    setTimeout(() => tr.classList.remove('flash'), 900);
+  }
+}
+
+function renderRows(betsDetail, markets) {
+  const body = document.getElementById('rowsBody');
+  body.innerHTML='';
+  if (!markets || !markets.length) return;
+  const showMarketCol = markets.length > 1;
+  const slice = betsDetail;
+  slice.forEach(b => {
+    const r = b.r, m = b.m, price = b.odds;
+    const d = r.data;
+    const won = b.won;
+    const sim = marketResult(m, r);
+    const pnl = b.pnl;
+    const tr = document.createElement('tr');
+    const wonBadge = won ? 'bg-success' : 'bg-danger';
+    const simNote = sim==null
+      ? `<span class="text-muted small" title="FT score missing – using original Strike">·orig</span>`
+      : '';
+    const marketBadge = showMarketCol
+      ? `<span class="badge bg-info-subtle text-dark border" title="${m}">${marketLabelFor(m)}</span> `
+      : '';
+    tr.innerHTML = `<td><span class="badge bg-light text-dark">${r.strategy}</span></td>
+      <td class="small">${r.alert_date||''}</td>
+      <td class="text-end">${r.timer||''}'</td>
+      <td class="small">${r.league||''}</td>
+      <td class="small">${marketBadge}${r.home_team} vs ${r.away_team}</td>
+      <td class="text-end small">${d.alert_h_score??''}-${d.alert_a_score??''}</td>
+      <td class="text-end small">${d.sum_ft_score||''}</td>
+      <td class="text-end">${price.toFixed(2)}</td>
+      <td class="text-end ${pnl>=0?'text-success':'text-danger'}">${(pnl>=0?'+£':'-£')+Math.abs(pnl).toFixed(2)}</td>
+      <td><span class="badge ${wonBadge}">${won?'Win':'Loss'}</span> <span class="text-muted small" title="Stake on this bet">@ £${b.stake.toFixed(2)}</span> ${simNote}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+// =================== Auto-optimiser ===================
+// Beam search across feature buckets to find filter combinations that maximise
+// score (Balanced/ROI/PnL) while keeping the bet count above minN. Pure JS, runs
+// on the same dataset already in memory, so it's instant for ~170 rows.
+
+function bucketsForFeature(rows, feature, nQuantiles) {
+  const values = rows.map(r => r.data[feature] ?? r[feature]);
+  if (!values.length) return [];
+  const buck = bucketize(values, feature, nQuantiles);
+  return buck.buckets;
+}
+
+function rowsMatchingFilters(rows, filters) {
+  return rows.filter(r => {
+    for (const {feature, bucket} of filters) {
+      if (bucket.kind === 'num') {
+        const v = parseFloat(r.data[feature] ?? r[feature]);
+        if (!isFinite(v)) return false;
+        if (v < bucket.low || v > bucket.high) return false;
+      } else {
+        if ((r.data[feature] ?? r[feature]) != bucket.value) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function scoreFor(stats, metric) {
+  if (!stats.bets) return -Infinity;
+  if (metric === 'roi') return stats.roi;
+  if (metric === 'pnl') return stats.pnl;
+  return stats.roi * Math.sqrt(stats.bets);    // size-adjusted
+}
+
+function filterSignature(filters) {
+  return filters.map(f => `${f.feature}=${f.bucket.label}`).sort().join(' AND ');
+}
+
+function runOptimizer() {
+  const btn = event.target.closest('button');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Searching…';
+  setTimeout(() => {     // let the UI paint the spinner
+    const t0 = performance.now();
+    try {
+      const markets = getSelectedMarkets();
+      if (!markets.length) { alert('Tick at least one bet market first.'); return; }
+      const cfg = getStakingConfig();
+      const minN = parseInt(document.getElementById('optMinN').value) || 15;
+      const maxDepth = parseInt(document.getElementById('optDepth').value) || 3;
+      const metric = document.getElementById('optMetric').value;
+      const mode = document.getElementById('optMode').value;
+      const nQuantiles = parseInt(document.getElementById('optBuckets').value) || 3;
+      const beamWidth = mode === 'exhaustive' ? Infinity : 8;
+
+      // Per-market strategy selection + dedupe are applied inside computePnLMulti,
+      // so the optimiser searches over the raw rows and lets each candidate slice
+      // resolve its own per-market bets.
+      const baseRows = ALL_ROWS.slice();
+      const candidateMap = {};                    // feature -> [buckets]
+      EDGE_FEATURES.forEach(f => {
+        const bs = bucketsForFeature(baseRows, f, nQuantiles);
+        if (bs.length) candidateMap[f] = bs;
+      });
+      window.__optStats = {searched: 0, t0};
+
+      const baseStats = computePnLMulti(baseRows, markets, cfg);
+      const allCombos = [{
+        filters: [], rows: baseRows,
+        bets: baseStats.bets, hitRate: baseStats.hitRate,
+        avgOdds: baseStats.avgOdds, pnl: baseStats.pnl, roi: baseStats.roi,
+        score: scoreFor(baseStats, metric), depth: 0,
+      }];
+
+      // Beam search (exhaustive when beamWidth=Infinity)
+      let beam = [{filters: [], rows: baseRows}];
+      const seen = new Set([filterSignature([])]);
+      for (let d = 1; d <= maxDepth; d++) {
+        const expanded = [];
+        for (const node of beam) {
+          const usedFeats = new Set(node.filters.map(x => x.feature));
+          for (const f of Object.keys(candidateMap)) {
+            if (usedFeats.has(f)) continue;
+            for (const b of candidateMap[f]) {
+              window.__optStats.searched++;
+              const newRows = rowsMatchingFilters(node.rows, [{feature: f, bucket: b}]);
+              if (newRows.length < minN) continue;
+              const stats = computePnLMulti(newRows, markets, cfg);
+              if (stats.bets < minN) continue;
+              const newFilters = [...node.filters, {feature: f, bucket: b}];
+              const sig = filterSignature(newFilters);
+              if (seen.has(sig)) continue;
+              seen.add(sig);
+              const score = scoreFor(stats, metric);
+              expanded.push({
+                filters: newFilters, rows: newRows,
+                bets: stats.bets, hitRate: stats.hitRate, avgOdds: stats.avgOdds,
+                pnl: stats.pnl, roi: stats.roi, score, depth: d,
+              });
+            }
+          }
+        }
+        expanded.sort((a,b) => b.score - a.score);
+        beam = (isFinite(beamWidth) ? expanded.slice(0, beamWidth) : expanded)
+                  .map(({filters, rows}) => ({filters, rows}));
+        allCombos.push(...expanded);
+        if (!beam.length) break;
+      }
+
+      allCombos.sort((a,b) => b.score - a.score);
+      const elapsedMs = Math.round(performance.now() - t0);
+      renderOptimizer(allCombos.slice(0, 12), metric, baseStats, {
+        mode, nQuantiles, searched: window.__optStats.searched, elapsedMs, maxDepth,
+      });
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-play me-1"></i>Find best';
+    }
+  }, 30);
+}
+
+function renderOptimizer(results, metric, baseStats, info) {
+  const body = document.getElementById('optBody');
+  body.innerHTML = '';
+  if (!results.length) {
+    body.innerHTML = `<tr><td colspan="8" class="text-center text-muted small p-2">No combinations met the minimum-N threshold. Lower Min N or reduce Depth.</td></tr>`;
+    return;
+  }
+  if (info) {
+    const head = document.createElement('tr');
+    const guarantee = info.mode === 'exhaustive'
+      ? `<span class="text-success">Exhaustive — guaranteed best within ${info.nQuantiles}-bucket cuts</span>`
+      : `<span class="text-warning">Beam search (top-8 per depth) — may miss global best; try Exhaustive to confirm</span>`;
+    head.innerHTML = `<td colspan="8" class="bg-light small">
+        ${guarantee}. Searched <strong>${info.searched.toLocaleString()}</strong> combinations
+        in <strong>${info.elapsedMs} ms</strong> (depth ≤ ${info.maxDepth}, ${info.nQuantiles} buckets/feature).
+      </td>`;
+    body.appendChild(head);
+  }
+  results.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    const pnlCls = r.pnl >= 0 ? 'text-success' : 'text-danger';
+    const lift = r.roi - baseStats.roi;
+    const filtersHtml = r.filters.length
+      ? r.filters.map(f =>
+          `<span class="badge bg-light text-dark border me-1" title="${f.feature}">${f.feature.replace(/_/g,' ')}: <strong>${f.bucket.label}</strong></span>`
+        ).join('')
+      : '<span class="text-muted small">no filters (baseline)</span>';
+    tr.innerHTML = `
+      <td class="text-muted">${idx+1}</td>
+      <td>${filtersHtml}</td>
+      <td class="text-end">${r.bets}</td>
+      <td class="text-end">${(r.hitRate*100).toFixed(1)}%</td>
+      <td class="text-end">${r.avgOdds ? r.avgOdds.toFixed(2) : '–'}</td>
+      <td class="text-end ${pnlCls}">${r.pnl>=0?'+':'-'}£${Math.abs(r.pnl).toFixed(2)}</td>
+      <td class="text-end ${pnlCls}">${(r.roi*100).toFixed(1)}%
+          <small class="text-muted">(${lift>=0?'+':''}${(lift*100).toFixed(1)} vs base)</small></td>
+      <td><button class="btn btn-sm btn-outline-primary py-0" data-idx="${idx}">Apply</button></td>`;
+    tr.querySelector('button').addEventListener('click', () => applyOptimization(r.filters));
+    body.appendChild(tr);
+  });
+}
+
+function applyOptimization(filters) {
+  resetFilters();   // clear sliders + multi-selects so the combo is exact
+  for (const {feature, bucket} of filters) {
+    if (bucket.kind === 'cat') {
+      const selId = feature === 'region' ? 'regSel' : (feature === 'league' ? 'leagSel' : null);
+      if (selId) {
+        const sel = document.getElementById(selId);
+        [...sel.options].forEach(o => { o.selected = (o.value == bucket.value); });
+      }
+    } else {
+      const state = FILTER_STATE[feature];
+      if (!state) continue;
+      let lo = bucket.low, hi = bucket.high;
+      if (!isFinite(lo)) lo = state.realMin;
+      if (!isFinite(hi)) hi = state.realMax;
+      lo = Math.max(state.realMin, lo);
+      hi = Math.min(state.realMax, hi);
+      state.min = lo; state.max = hi;
+      const mnEl = document.getElementById('min_'+feature);
+      const mxEl = document.getElementById('max_'+feature);
+      if (mnEl) mnEl.value = lo;
+      if (mxEl) mxEl.value = hi;
+      const lbl = document.getElementById('lbl_'+feature);
+      if (lbl) {
+        const step = (SLIDERS.find(x=>x[0]===feature) || [])[3] ?? 1;
+        const fmt = step < 1 ? 2 : 0;
+        lbl.textContent = `${lo.toFixed(fmt)} – ${hi.toFixed(fmt)}`;
+      }
+    }
+  }
+  recompute();
+  // Scroll the filters panel into view so it's obvious what was applied
+  document.querySelector('.filter-card')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// =================== Excel export ===================
+// Builds a multi-sheet workbook from the current in-memory filtered state:
+//   1. Settings & Summary — every active filter + KPIs for the on-screen market
+//   2. Per-Strategy        — comparison table (current market)
+//   3. <Market name>       — one tab per PRICE_COLUMNS entry: KPI header + bet rows
+//                            with P&L recomputed against that market for the same
+//                            filtered alerts.
+function exportToExcel() {
+  if (typeof XLSX === 'undefined') { alert('SheetJS failed to load — try refreshing the page.'); return; }
+  const filtered = ALL_ROWS.filter(passesFilters);
+  if (!filtered.length) { alert('No filtered rows to export — relax some filters first.'); return; }
+
+  const cfg = getStakingConfig();
+  const mcfg = getMarketsConfig();
+  const selectedMarkets = getSelectedMarkets();
+  if (!selectedMarkets.length) { alert('Tick at least one bet market before exporting.'); return; }
+  const strats = META.map(m => m.strategy);
+  const wb = XLSX.utils.book_new();
+
+  // --- Sheet 1: Settings & Summary ---
+  const settingsRows = [];
+  settingsRows.push(['Bet Scenario Tool — Strategy Simulator Export']);
+  settingsRows.push(['Generated', new Date().toLocaleString()]);
+  settingsRows.push([]);
+  settingsRows.push(['SETTINGS']);
+  selectedMarkets.forEach(k => {
+    const sel = mcfg.markets[k].strategies || [];
+    settingsRows.push(['Strategies — ' + mcfg.markets[k].label,
+      sel.length === strats.length ? 'All' : (sel.join(', ') || 'none')]);
+  });
+  settingsRows.push(['Staking mode', cfg.label]);
+  if (cfg.mode === 'flat')    settingsRows.push(['Stake (£) per bet', cfg.stake]);
+  if (cfg.mode === 'pctBank') { settingsRows.push(['Starting bank (£)', cfg.startingBank]); settingsRows.push(['% of bank per bet', cfg.pct]); }
+  if (cfg.mode === 'kelly')   { settingsRows.push(['Starting bank (£)', cfg.startingBank]); settingsRows.push(['Kelly fraction', cfg.kellyFrac]); }
+  settingsRows.push(['Commission (%) — on winnings only', cfg.commPct]);
+  settingsRows.push(['Selected markets (' + selectedMarkets.length + ')', selectedMarkets.map(marketLabelFor).join(', ')]);
+  settingsRows.push(['Filtered rows', filtered.length]);
+  settingsRows.push(['Total rows in dataset', ALL_ROWS.length]);
+
+  const regs = [...document.getElementById('regSel')?.selectedOptions || []].map(o => o.value);
+  const leags = [...document.getElementById('leagSel')?.selectedOptions || []].map(o => o.value);
+  if (regs.length) settingsRows.push(['Regions', regs.join(', ')]);
+  if (leags.length) settingsRows.push(['Leagues', leags.join(', ')]);
+  const dFrom = document.getElementById('dateFrom')?.value;
+  const dTo = document.getElementById('dateTo')?.value;
+  if (dFrom || dTo) settingsRows.push(['Date range', `${dFrom || 'start'} → ${dTo || 'end'}`]);
+
+  const activeSliders = [];
+  for (const [field, s] of Object.entries(FILTER_STATE)) {
+    if (s.min !== s.realMin || s.max !== s.realMax) {
+      const label = (SLIDERS.find(x => x[0] === field) || [])[1] || field;
+      const step = (SLIDERS.find(x => x[0] === field) || [])[3] ?? 1;
+      const fmt = step < 1 ? 2 : 0;
+      activeSliders.push([label, `${s.min.toFixed(fmt)} – ${s.max.toFixed(fmt)}`, `(full range: ${s.realMin.toFixed(fmt)} – ${s.realMax.toFixed(fmt)})`]);
+    }
+  }
+  if (activeSliders.length) {
+    settingsRows.push([]);
+    settingsRows.push(['ACTIVE SLIDER FILTERS']);
+    settingsRows.push(['Field', 'Current range', 'Full range']);
+    activeSliders.forEach(r => settingsRows.push(r));
+  } else {
+    settingsRows.push([]);
+    settingsRows.push(['ACTIVE SLIDER FILTERS', '(none — all sliders at full range)']);
+  }
+
+  // KPIs for the selected basket (combined across all ticked markets)
+  const summaryStats = computePnLMulti(filtered, selectedMarkets, cfg);
+  settingsRows.push([]);
+  settingsRows.push(['RESULTS (basket — all ticked markets combined)']);
+  settingsRows.push(['Bets (alerts × markets)', summaryStats.bets]);
+  if (summaryStats.skipped) settingsRows.push(['Bets skipped (zero stake / bank depleted)', summaryStats.skipped]);
+  settingsRows.push(['Wins', summaryStats.wins]);
+  settingsRows.push(['Hit-rate (%)', +(summaryStats.hitRate * 100).toFixed(2)]);
+  settingsRows.push(['Total Staked (£)', +summaryStats.stake.toFixed(2)]);
+  settingsRows.push(['Return (£)', +(summaryStats.pnl + summaryStats.stake).toFixed(2)]);
+  settingsRows.push(['P&L (£)', +summaryStats.pnl.toFixed(2)]);
+  settingsRows.push(['ROI (%)', +(summaryStats.roi * 100).toFixed(2)]);
+  settingsRows.push(['Avg Odds', +summaryStats.avgOdds.toFixed(2)]);
+  if (summaryStats.startingBank != null) {
+    settingsRows.push(['Starting bank (£)', +summaryStats.startingBank.toFixed(2)]);
+    settingsRows.push(['Ending bank (£)', +summaryStats.endingBank.toFixed(2)]);
+  }
+  settingsRows.push(['Max win streak', summaryStats.maxWin]);
+  settingsRows.push(['Max loss streak', summaryStats.maxLoss]);
+  settingsRows.push([]);
+  settingsRows.push(['RISK & ROBUSTNESS']);
+  settingsRows.push(['Max drawdown (£) — peak-to-trough of cumulative P&L', +summaryStats.maxDD.toFixed(2)]);
+  settingsRows.push(['Longest losing streak (bets)', summaryStats.maxDDUnits]);
+  settingsRows.push(['Recovery to pre-run peak (bets)',
+    summaryStats.recovBets == null
+      ? (summaryStats.maxDDUnits > 0 ? 'Not recovered' : 'n/a')
+      : summaryStats.recovBets]);
+  settingsRows.push(['Recovery to pre-run peak (days)',
+    summaryStats.recovBets == null
+      ? (summaryStats.maxDDUnits > 0 ? 'Not recovered' : 'n/a')
+      : (summaryStats.recovDays == null ? 'unknown' : summaryStats.recovDays)]);
+  settingsRows.push(['Profit factor', isFinite(summaryStats.profitFactor)
+    ? +summaryStats.profitFactor.toFixed(3) : 'Infinity (no losses)']);
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(settingsRows);
+  wsSummary['!cols'] = [{wch:34},{wch:48},{wch:38}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+  // --- Sheet 2: Per-strategy comparison (basket) ---
+  const basketLabel = selectedMarkets.length === 1
+    ? marketLabelFor(selectedMarkets[0])
+    : `${selectedMarkets.length}-market basket`;
+  const compareRows = [['Per-Strategy Comparison — ' + basketLabel]];
+  compareRows.push([]);
+  compareRows.push(['Strategy','Bets','Hit-rate (%)','Avg Odds','Staked (£)','P&L (£)','ROI (%)']);
+  META.forEach(m => {
+    const rows = ALL_ROWS.filter(r => r.strategy === m.strategy && passesFilters(r));
+    const s = computePnLMulti(rows, selectedMarkets, cfg, true);
+    compareRows.push([
+      m.strategy, s.bets,
+      +(s.hitRate * 100).toFixed(2),
+      +s.avgOdds.toFixed(2),
+      +s.stake.toFixed(2),
+      +s.pnl.toFixed(2),
+      +(s.roi * 100).toFixed(2),
+    ]);
+  });
+  const wsCompare = XLSX.utils.aoa_to_sheet(compareRows);
+  wsCompare['!cols'] = [{wch:22},{wch:8},{wch:14},{wch:10},{wch:12},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsCompare, 'Per-Strategy');
+
+  const usedNames = new Set(['Summary', 'Per-Strategy']);
+
+  // --- Optional Sheet: Combined Basket (only when >1 market is ticked) ---
+  // Shows every (alert × ticked market) as its own row in alert-date order,
+  // matching the running cumulative P&L in the chart.
+  if (selectedMarkets.length > 1) {
+    const basketRows = [];
+    basketRows.push(['Combined Basket — ' + selectedMarkets.map(marketLabelFor).join(' + ')]);
+    basketRows.push(['Bets', summaryStats.bets, '', 'Hit-rate (%)', +(summaryStats.hitRate * 100).toFixed(2)]);
+    basketRows.push(['Staked (£)', +summaryStats.stake.toFixed(2), '', 'Avg Odds', +summaryStats.avgOdds.toFixed(2)]);
+    basketRows.push(['P&L (£)', +summaryStats.pnl.toFixed(2), '', 'ROI (%)', +(summaryStats.roi * 100).toFixed(2)]);
+    basketRows.push([]);
+    basketRows.push(['Strategy','Date','Min','League','Match','Score @alert','FT','Market','Odds','Result','Stake (£)','P&L (£)','Cumulative P&L (£)']);
+
+    // Use the per-bet stream built by runStakedPnL — already chronologically
+    // ordered and uses the actual per-bet stake (flat / pct-bank / Kelly).
+    for (const b of summaryStats.betsDetail) {
+      const r = b.r, m = b.m, d = r.data;
+      basketRows.push([
+        r.strategy,
+        r.alert_date || '',
+        r.timer != null ? r.timer + "'" : '',
+        r.league || '',
+        `${r.home_team || ''} vs ${r.away_team || ''}`,
+        `${d.alert_h_score ?? ''}-${d.alert_a_score ?? ''}`,
+        d.sum_ft_score || '',
+        marketLabelFor(m),
+        +b.odds.toFixed(2),
+        b.won ? 'Win' : 'Loss',
+        +b.stake.toFixed(2),
+        +b.pnl.toFixed(2),
+        +b.cum.toFixed(2),
+      ]);
+    }
+    const wsBasket = XLSX.utils.aoa_to_sheet(basketRows);
+    wsBasket['!cols'] = [
+      {wch:14},{wch:11},{wch:6},{wch:24},{wch:34},
+      {wch:12},{wch:8},{wch:22},{wch:8},{wch:8},
+      {wch:10},{wch:12},{wch:18},
+    ];
+    XLSX.utils.book_append_sheet(wb, wsBasket, 'Combined Basket');
+    usedNames.add('Combined Basket');
+  }
+
+  // --- Sheets 3..N: one tab per market (covers all 18 PRICE_COLUMNS) ---
+  // Each per-market sheet re-runs the staking engine for that single market,
+  // so per-bet stakes reflect the chosen mode (and the bank for % / Kelly
+  // evolves independently per market, as if you ran each market in isolation).
+  // These are what-if reference tabs across ALL strategies (deduped per game),
+  // independent of the per-market strategy ticks used in the live sim.
+  const filteredDeduped = dedupeGames(filtered);
+  PRICE_COLUMNS.forEach(([field, label]) => {
+    const s = computePnL(filteredDeduped, field, cfg);
+    const sheetName = sanitizeSheetName(label, usedNames);
+    usedNames.add(sheetName);
+
+    const rows = [];
+    rows.push([label]);
+    rows.push(['Bets', s.bets, '', 'Hit-rate (%)', +(s.hitRate * 100).toFixed(2)]);
+    rows.push(['Staked (£)', +s.stake.toFixed(2), '', 'Avg Odds', +s.avgOdds.toFixed(2)]);
+    rows.push(['P&L (£)', +s.pnl.toFixed(2), '', 'ROI (%)', +(s.roi * 100).toFixed(2)]);
+    if (s.startingBank != null) {
+      rows.push(['Starting bank (£)', +s.startingBank.toFixed(2), '', 'Ending bank (£)', +s.endingBank.toFixed(2)]);
+    }
+    rows.push([]);
+    rows.push(['Strategy','Date','Min','League','Match','Score @alert','FT','Market','Odds','Result','Stake (£)','P&L (£)','Cumulative P&L (£)']);
+
+    for (const b of s.betsDetail) {
+      const r = b.r, d = r.data;
+      rows.push([
+        r.strategy,
+        r.alert_date || '',
+        r.timer != null ? r.timer + "'" : '',
+        r.league || '',
+        `${r.home_team || ''} vs ${r.away_team || ''}`,
+        `${d.alert_h_score ?? ''}-${d.alert_a_score ?? ''}`,
+        d.sum_ft_score || '',
+        label,
+        +b.odds.toFixed(2),
+        b.won ? 'Win' : 'Loss',
+        +b.stake.toFixed(2),
+        +b.pnl.toFixed(2),
+        +b.cum.toFixed(2),
+      ]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      {wch:14},{wch:11},{wch:6},{wch:24},{wch:34},
+      {wch:12},{wch:8},{wch:22},{wch:8},{wch:8},
+      {wch:10},{wch:12},{wch:18},
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `strategy_export_${today}.xlsx`);
+}
+
+// Filtered-alerts-only export — single sheet, every (alert × ticked market)
+// in alert-date order with running P&L. No 500-row display cap.
+function exportFilteredAlerts() {
+  if (typeof XLSX === 'undefined') { alert('SheetJS failed to load — try refreshing the page.'); return; }
+  const filtered = ALL_ROWS.filter(passesFilters);
+  if (!filtered.length) { alert('No filtered rows to export — relax some filters first.'); return; }
+  const markets = getSelectedMarkets();
+  if (!markets.length) { alert('Tick at least one bet market before exporting.'); return; }
+
+  const cfg = getStakingConfig();
+  const s = computePnLMulti(filtered, markets, cfg);
+
+  const rows = [['Strategy','Date','Min','League','Match','Score @alert','FT','Market','Odds','Result','Stake (£)','P&L (£)','Cumulative P&L (£)']];
+  for (const b of s.betsDetail) {
+    const r = b.r, m = b.m, d = r.data;
+    rows.push([
+      r.strategy,
+      r.alert_date || '',
+      r.timer != null ? r.timer + "'" : '',
+      r.league || '',
+      `${r.home_team || ''} vs ${r.away_team || ''}`,
+      `${d.alert_h_score ?? ''}-${d.alert_a_score ?? ''}`,
+      d.sum_ft_score || '',
+      marketLabelFor(m),
+      +b.odds.toFixed(2),
+      b.won ? 'Win' : 'Loss',
+      +b.stake.toFixed(2),
+      +b.pnl.toFixed(2),
+      +b.cum.toFixed(2),
+    ]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:14},{wch:11},{wch:6},{wch:24},{wch:34},
+    {wch:12},{wch:8},{wch:22},{wch:8},{wch:8},
+    {wch:10},{wch:12},{wch:18},
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Filtered Alerts');
+  const today = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `filtered_alerts_${today}.xlsx`);
+}
+
+// Excel sheet names: max 31 chars, no : \ / ? * [ ], must be unique.
+function sanitizeSheetName(name, used) {
+  let s = String(name).replace(/[:\\\/\?\*\[\]]/g, '').slice(0, 31).trim() || 'Sheet';
+  if (!used.has(s)) return s;
+  let i = 2;
+  while (used.has(`${s.slice(0, 28)} ${i}`)) i++;
+  return `${s.slice(0, 28)} ${i}`;
+}
+
+async function reimport() {
+  const btn = event.target.closest('button');
+  btn.disabled = true; btn.textContent = 'Re-importing…';
+  try {
+    const r = await fetch('/api/strategies/reimport', {method:'POST'});
+    const j = await r.json();
+    let msg = j.summary.map(s => s.error ? `${s.file}: ${s.error}` : `${s.file}: ${s.imported} rows`).join('\n');
+    alert(msg || 'No files found.');
+    await loadData();
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate me-1"></i>Re-import xlsx';
+  }
+}
+</script>
+</body>
+</html>

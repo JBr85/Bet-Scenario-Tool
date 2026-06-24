@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bet Scenario Tool - Horse Racing</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #1a1a2e; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 15px 20px; display: block; border-left: 3px solid transparent; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; border-left-color: #0f3460; }
+        .stat-card { border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .pnl-positive { color: #28a745; font-weight: bold; }
+        .pnl-negative { color: #dc3545; font-weight: bold; }
+        .results-table { font-size: 0.9rem; }
+        .track-check-group { max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; }
+        .track-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #f5f5f5; }
+        .track-row:last-child { border-bottom: none; }
+        .track-pnl-badge { font-size: 0.65em; min-width: 52px; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row flex-nowrap">
+        <div class="col-md-2 sidebar p-0">
+            <h4 class="text-white p-3"><i class="fas fa-chart-line"></i> Bet Tool</h4>
+            <a href="/"><i class="fas fa-home me-2"></i> Dashboard</a>
+            <a href="/data"><i class="fas fa-database me-2"></i> Data</a>
+            <a href="/analysis"><i class="fas fa-chart-bar me-2"></i> Analytics - Simulation</a>
+            <a href="/analytics-real"><i class="fas fa-chart-line me-2"></i> Analytics - Real Data</a>
+            <a href="/strategies"><i class="fas fa-flask me-2"></i> Strategies</a>
+            <a href="/horses" class="active"><i class="fas fa-horse me-2"></i> Horse Racing</a>
+            <a href="/horses?cat=Win" class="ps-4" style="font-size:0.85em; border-left-color: transparent;"><i class="fas fa-trophy me-2"></i> Win</a>
+            <a href="/horses?cat=Place" class="ps-4" style="font-size:0.85em; border-left-color: transparent;"><i class="fas fa-medal me-2"></i> Place</a>
+            <a href="/today"><i class="fas fa-calendar-day me-2"></i> Today's Bets</a>
+            <a href="/place-bets"><i class="fas fa-ticket-alt me-2"></i> Place Bets</a>
+            <a href="/settings"><i class="fas fa-cog me-2"></i> Settings</a>
+        </div>
+
+        <div class="col-md-10 p-4" style="overflow-y: auto; height: 100vh;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2><i class="fas fa-horse me-2"></i> Horse Racing</h2>
+                <span class="badge bg-secondary fs-6"><i class="fas fa-database me-1"></i> {{ hr_tracks|length }} tracks</span>
+            </div>
+
+            <!-- Bet Category Filter -->
+            <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+                <span class="text-muted small fw-bold me-1">System:</span>
+                {% set cats = [('', 'All', 'secondary'), ('Win', 'Win', 'primary'), ('Place', 'Place', 'success'), ('EW', 'Each Way', 'warning')] %}
+                {% for val, label, colour in cats %}
+                {% set count = cat_counts.get(val if val else 'Untagged', 0) if val == '' else cat_counts.get(val, 0) %}
+                <button class="btn btn-sm btn-outline-{{ colour }} cat-filter-btn {% if val == '' %}active{% endif %}"
+                        data-cat="{{ val }}" onclick="setCatFilter('{{ val }}', this)">
+                    {{ label }}
+                    <span class="badge bg-{{ colour }} ms-1">
+                        {% if val == '' %}{{ cat_counts.values()|sum }}{% else %}{{ count }}{% endif %}
+                    </span>
+                </button>
+                {% endfor %}
+                <span class="text-muted small ms-2" id="untaggedNote"
+                      style="{{ 'display:none' if cat_counts.get('Untagged', 0) == 0 else '' }}">
+                    <i class="fas fa-tag me-1"></i>{{ cat_counts.get('Untagged', 0) }} untagged
+                    — click a row's category badge to assign
+                </span>
+            </div>
+
+            <!-- Configuration Panel -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-sliders me-2"></i> Analysis Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+
+                        <!-- Track Selection -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Tracks</strong></label>
+                            <div class="mb-1 d-flex gap-1 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllTracks()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllTracks()">None</button>
+                            </div>
+                            <div class="track-check-group" id="trackContainer">
+                                {% for track in hr_tracks %}
+                                <div class="track-row">
+                                    <div class="form-check mb-0 flex-grow-1">
+                                        <input class="form-check-input track-checkbox" type="checkbox"
+                                               value="{{ track.label }}" id="tr_{{ loop.index }}">
+                                        <label class="form-check-label small" for="tr_{{ loop.index }}">
+                                            {{ track.label }}
+                                        </label>
+                                    </div>
+                                    <span class="badge bg-secondary track-pnl-badge" data-track="{{ track.label }}">–</span>
+                                </div>
+                                {% endfor %}
+                                {% if not hr_tracks %}
+                                <div class="text-muted small p-2">No tracks detected yet.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all tracks</small>
+                        </div>
+
+                        <!-- Selection (Market) -->
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label"><strong>Select Horses / Bet Types</strong></label>
+                            <div class="mb-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="selectAllMarkets()">All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAllMarkets()">None</button>
+                            </div>
+                            <div class="track-check-group" id="marketContainer">
+                                {% for market in hr_markets %}
+                                <div class="form-check p-2 mb-0">
+                                    <input class="form-check-input market-checkbox" type="checkbox"
+                                           value="{{ market }}" id="mkt_{{ loop.index }}">
+                                    <label class="form-check-label small" for="mkt_{{ loop.index }}">{{ market }}</label>
+                                </div>
+                                {% endfor %}
+                                {% if not hr_markets %}
+                                <div class="text-muted small p-2">No selections detected yet.</div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Leave all unchecked = all selections</small>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Date Range</strong></label>
+                            <div class="mb-2">
+                                <label class="small text-muted">From</label>
+                                <input type="date" class="form-control form-control-sm" id="dateStart"
+                                       value="{{ hr_date_min }}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="small text-muted">To</label>
+                                <input type="date" class="form-control form-control-sm" id="dateEnd"
+                                       value="{{ hr_date_max }}">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="resetDateRange()">
+                                <i class="fas fa-undo me-1"></i> All Dates
+                            </button>
+                        </div>
+
+                        <!-- Staking (flat only) -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Staking</strong></label>
+                            <div class="mb-1 px-2 py-1 rounded bg-light border text-muted small">
+                                <i class="fas fa-lock me-1"></i> Flat Stake
+                            </div>
+                            <label class="small text-muted mt-2">Base Stake (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="baseStake" value="{{ config.base_stake or 10 }}">
+                            <label class="small text-muted">Starting Bank (£)</label>
+                            <input type="number" class="form-control form-control-sm mb-2" id="startingBank" value="{{ config.daily_bank or 100 }}">
+                            <label class="small text-muted">Commission % <span class="text-muted">(on winnings)</span></label>
+                            <input type="number" class="form-control form-control-sm" id="commission" value="{{ config.commission or 0 }}" min="0" max="100" step="0.1">
+                        </div>
+
+                        <!-- Odds Range -->
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label"><strong>Odds Range</strong></label>
+                            <div class="mb-2">
+                                <label class="small text-muted">Min</label>
+                                <input type="number" class="form-control form-control-sm" id="oddsMin" value="1.0" step="0.1" min="1">
+                            </div>
+                            <div>
+                                <label class="small text-muted">Max</label>
+                                <input type="number" class="form-control form-control-sm" id="oddsMax" value="1000" step="0.1">
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-2">
+                            <button class="btn btn-success w-100" onclick="runAnalysis()" id="runBtn">
+                                <i class="fas fa-play me-2"></i> Run Analysis
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="row mb-4" id="statsRow" style="display:none;">
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-primary text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">Total Bets</h6>
+                            <h3 class="mb-0" id="sTotalBets">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-secondary text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">Win Rate</h6>
+                            <h3 class="mb-0" id="sWinRate">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-warning text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">ROI</h6>
+                            <h3 class="mb-0" id="sRoi">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-dark text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">Total P&amp;L</h6>
+                            <h3 class="mb-0" id="sTotalPnl">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-info text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">Win P&amp;L</h6>
+                            <h3 class="mb-0" id="sWinPnl">–</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="card stat-card bg-success text-white">
+                        <div class="card-body text-center py-2">
+                            <h6 class="mb-1">Place P&amp;L</h6>
+                            <h3 class="mb-0" id="sPlacePnl">–</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Breakdown -->
+            <div class="card mb-4" id="dailyCard" style="display:none;">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i> Daily Breakdown</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped results-table mb-0" id="dailyTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th onclick="sortDaily(0)" style="cursor:pointer;">Date</th>
+                                    <th onclick="sortDaily(1)" style="cursor:pointer;" class="text-end">Bets</th>
+                                    <th onclick="sortDaily(2)" style="cursor:pointer;" class="text-end">Won</th>
+                                    <th onclick="sortDaily(3)" style="cursor:pointer;" class="text-end">Lost</th>
+                                    <th onclick="sortDaily(4)" style="cursor:pointer;" class="text-end">Staked</th>
+                                    <th onclick="sortDaily(5)" style="cursor:pointer;" class="text-end">Win P&amp;L</th>
+                                    <th onclick="sortDaily(6)" style="cursor:pointer;" class="text-end">Place P&amp;L</th>
+                                    <th onclick="sortDaily(7)" style="cursor:pointer;" class="text-end">P&amp;L</th>
+                                    <th onclick="sortDaily(8)" style="cursor:pointer;" class="text-end">End Bank</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailyBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bets Table -->
+            <div class="card" id="resultsCard" style="display:none;">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i> Bets</h5>
+                    <input type="text" class="form-control form-control-sm w-25" id="tableSearch"
+                           placeholder="Search race / selection…" oninput="filterTable()">
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped results-table mb-0" id="betsTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th onclick="sortTable(0)" style="cursor:pointer;">Date</th>
+                                    <th onclick="sortTable(1)" style="cursor:pointer;">Race</th>
+                                    <th onclick="sortTable(2)" style="cursor:pointer;">Selection</th>
+                                    <th onclick="sortTable(3)" style="cursor:pointer;">Track</th>
+                                    <th onclick="sortTable(4)" style="cursor:pointer;" class="text-end">Odds</th>
+                                    <th onclick="sortTable(5)" style="cursor:pointer;" class="text-end">Stake</th>
+                                    <th onclick="sortTable(6)" style="cursor:pointer;">System</th>
+                                    <th onclick="sortTable(7)" style="cursor:pointer;" class="text-end">P&amp;L</th>
+                                    <th onclick="sortTable(8)" style="cursor:pointer;" class="text-end">Bank</th>
+                                </tr>
+                            </thead>
+                            <tbody id="betsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="noDataMsg" class="text-center py-5 text-muted" style="display:none;">
+                <i class="fas fa-horse fa-3x mb-3 opacity-25"></i>
+                <p>No horse racing bets found for the selected filters.</p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const HR_DATE_MIN = '{{ hr_date_min }}';
+    const HR_DATE_MAX = '{{ hr_date_max }}';
+
+    let allBets = [];
+    let allDaily = [];
+    let sortDir = {};
+    let dailySortDir = {};
+    let activeCat = '';   // '', 'Win', 'Place', 'EW'
+
+    function fmtPnl(val) {
+        return (val >= 0 ? '+' : '-') + '£' + Math.abs(val).toFixed(2);
+    }
+
+    function setPnl(id, val) {
+        const el = document.getElementById(id);
+        el.textContent = fmtPnl(val);
+        el.className = 'mb-0 h3 ' + (val >= 0 ? 'pnl-positive' : 'pnl-negative');
+    }
+
+    function updateTrackBadges(bets) {
+        const map = {};
+        bets.forEach(b => {
+            const key = (b.track || '').replace(' / ', ' - ');
+            map[key] = (map[key] || 0) + b.pnl;
+        });
+        document.querySelectorAll('.track-pnl-badge').forEach(badge => {
+            const key = badge.getAttribute('data-track');
+            if (key in map) {
+                const p = map[key];
+                badge.textContent = fmtPnl(p);
+                badge.className = 'badge track-pnl-badge ' + (p >= 0 ? 'bg-success' : 'bg-danger');
+            } else {
+                badge.textContent = '–';
+                badge.className = 'badge bg-secondary track-pnl-badge';
+            }
+        });
+    }
+
+    // ---- Category filter ----
+    function setCatFilter(cat, btn) {
+        activeCat = cat;
+        document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        runAnalysis();
+    }
+
+    const CAT_COLOURS = { Win: 'primary', Place: 'success', EW: 'warning' };
+
+    function catBadge(id, cat) {
+        if (!cat) {
+            return `<div class="dropdown d-inline-block">
+              <span class="badge bg-secondary cat-badge" role="button" data-bs-toggle="dropdown"
+                    title="Click to assign system">Untagged ▾</span>
+              <ul class="dropdown-menu dropdown-menu-sm">
+                <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'Win');return false;">Win</a></li>
+                <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'Place');return false;">Place</a></li>
+                <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'EW');return false;">Each Way</a></li>
+              </ul>
+            </div>`;
+        }
+        const colour = CAT_COLOURS[cat] || 'secondary';
+        return `<div class="dropdown d-inline-block">
+          <span class="badge bg-${colour} cat-badge" role="button" data-bs-toggle="dropdown"
+                title="Click to change">${cat} ▾</span>
+          <ul class="dropdown-menu dropdown-menu-sm">
+            <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'Win');return false;">Win</a></li>
+            <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'Place');return false;">Place</a></li>
+            <li><a class="dropdown-item small" href="#" onclick="setCategory(${id},'EW');return false;">Each Way</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item small text-muted" href="#" onclick="setCategory(${id},'');return false;">Clear</a></li>
+          </ul>
+        </div>`;
+    }
+
+    function setCategory(id, cat) {
+        fetch('/api/horses/set-category', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ids: [id], category: cat })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            // Update local state and re-render without a full re-fetch
+            const bet = allBets.find(b => b.id === id);
+            if (bet) { bet.bet_category = cat; renderTable(allBets); }
+        })
+        .catch(err => alert('Failed to update category: ' + err));
+    }
+
+    // ---- Track helpers ----
+    function getSelectedTracks() {
+        return Array.from(document.querySelectorAll('.track-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllTracks() { document.querySelectorAll('.track-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllTracks()  { document.querySelectorAll('.track-checkbox').forEach(cb => cb.checked = false); }
+
+    // ---- Market helpers ----
+    function getSelectedMarkets() {
+        return Array.from(document.querySelectorAll('.market-checkbox:checked')).map(cb => cb.value);
+    }
+    function selectAllMarkets() { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = true); }
+    function clearAllMarkets()  { document.querySelectorAll('.market-checkbox').forEach(cb => cb.checked = false); }
+
+    // ---- Date helpers ----
+    function resetDateRange() {
+        document.getElementById('dateStart').value = HR_DATE_MIN;
+        document.getElementById('dateEnd').value   = HR_DATE_MAX;
+    }
+
+    // ---- Main analysis ----
+    function runAnalysis() {
+        const payload = {
+            date_from:        document.getElementById('dateStart').value,
+            date_to:          document.getElementById('dateEnd').value,
+            base_stake:       parseFloat(document.getElementById('baseStake').value) || 10,
+            starting_bank:    parseFloat(document.getElementById('startingBank').value) || 100,
+            commission:       parseFloat(document.getElementById('commission').value) || 0,
+            odds_min:         parseFloat(document.getElementById('oddsMin').value) || 1.0,
+            odds_max:         parseFloat(document.getElementById('oddsMax').value) || 1000,
+            selected_tracks:  getSelectedTracks(),
+            selected_markets: getSelectedMarkets(),
+            bet_category:     activeCat,
+        };
+
+        const btn = document.getElementById('runBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running...';
+
+        fetch('/api/horses/analysis', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const s = data.summary;
+
+            if (s.total_bets === 0) {
+                document.getElementById('statsRow').style.display = 'none';
+                document.getElementById('resultsCard').style.display = 'none';
+                document.getElementById('dailyCard').style.display = 'none';
+                document.getElementById('noDataMsg').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('noDataMsg').style.display = 'none';
+            document.getElementById('statsRow').style.display = '';
+            document.getElementById('resultsCard').style.display = '';
+            document.getElementById('dailyCard').style.display = '';
+
+            document.getElementById('sTotalBets').textContent = s.total_bets;
+            document.getElementById('sWinRate').textContent   = s.win_rate + '%';
+            document.getElementById('sRoi').textContent = (s.roi >= 0 ? '+' : '') + s.roi + '%';
+
+            setPnl('sTotalPnl', s.total_pnl);
+            setPnl('sWinPnl',   s.win_pnl   || 0);
+            setPnl('sPlacePnl', s.place_pnl || 0);
+
+            allBets = data.bets;
+            allDaily = data.daily_results || [];
+            renderTable(allBets);
+            renderDaily(allDaily);
+            updateTrackBadges(allBets);
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play me-2"></i> Run Analysis';
+            alert('Analysis failed: ' + err);
+        });
+    }
+
+    function renderTable(bets) {
+        const tbody = document.getElementById('betsBody');
+        tbody.innerHTML = '';
+        bets.forEach(b => {
+            const pnlCls    = b.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            const resultBadge = b.pnl > 0
+                ? '<span class="badge bg-success">Won</span>'
+                : '<span class="badge bg-danger">Lost</span>';
+
+            tbody.insertAdjacentHTML('beforeend', `<tr>
+                <td>${(b.date || '').substring(0,10)}</td>
+                <td>${b.race || ''}</td>
+                <td>${b.selection || ''}</td>
+                <td>${b.track || ''}</td>
+                <td class="text-end">${b.odds ? b.odds.toFixed(2) : '–'}</td>
+                <td class="text-end">£${b.stake.toFixed(2)}</td>
+                <td>${catBadge(b.id, b.bet_category)}</td>
+                <td class="text-end ${pnlCls}">${fmtPnl(b.pnl)}</td>
+                <td class="text-end">£${b.bank.toFixed(2)}</td>
+            </tr>`);
+        });
+    }
+
+    function renderDaily(days) {
+        const tbody = document.getElementById('dailyBody');
+        tbody.innerHTML = '';
+        days.forEach(d => {
+            const pnlCls   = d.pnl   >= 0 ? 'pnl-positive' : 'pnl-negative';
+            const winCls   = d.win_pnl   >= 0 ? 'pnl-positive' : 'pnl-negative';
+            const placeCls = d.place_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            tbody.insertAdjacentHTML('beforeend', `<tr>
+                <td>${d.date}</td>
+                <td class="text-end">${d.bets}</td>
+                <td class="text-end">${d.won}</td>
+                <td class="text-end">${d.lost}</td>
+                <td class="text-end">£${d.staked.toFixed(2)}</td>
+                <td class="text-end ${winCls}">${fmtPnl(d.win_pnl)}</td>
+                <td class="text-end ${placeCls}">${fmtPnl(d.place_pnl)}</td>
+                <td class="text-end ${pnlCls}">${fmtPnl(d.pnl)}</td>
+                <td class="text-end">£${d.end_bank.toFixed(2)}</td>
+            </tr>`);
+        });
+    }
+
+    function sortDaily(col) {
+        const keys = ['date','bets','won','lost','staked','win_pnl','place_pnl','pnl','end_bank'];
+        const key  = keys[col];
+        dailySortDir[col] = !dailySortDir[col];
+        const asc = dailySortDir[col];
+        const sorted = [...allDaily].sort((a, b) => {
+            const va = a[key] ?? '', vb = b[key] ?? '';
+            if (typeof va === 'number') return asc ? va - vb : vb - va;
+            return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+        });
+        document.querySelectorAll('#dailyTable th').forEach((th, i) => {
+            th.style.textDecoration = i === col ? 'underline' : '';
+        });
+        renderDaily(sorted);
+    }
+
+    function filterTable() {
+        const q = document.getElementById('tableSearch').value.toLowerCase();
+        const filtered = q
+            ? allBets.filter(b =>
+                (b.race || '').toLowerCase().includes(q) ||
+                (b.selection || '').toLowerCase().includes(q) ||
+                (b.track || '').toLowerCase().includes(q))
+            : allBets;
+        renderTable(filtered);
+    }
+
+    function sortTable(col) {
+        const keys = ['date','race','selection','track','odds','stake','bet_category','pnl','bank'];
+        const key  = keys[col];
+        sortDir[col] = !sortDir[col];
+        const asc  = sortDir[col];
+        const sorted = [...allBets].sort((a, b) => {
+            const va = a[key] ?? '', vb = b[key] ?? '';
+            if (typeof va === 'number') return asc ? va - vb : vb - va;
+            return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+        });
+        document.querySelectorAll('#betsTable th').forEach((th, i) => {
+            th.style.textDecoration = i === col ? 'underline' : '';
+        });
+        renderTable(sorted);
+    }
+
+    // Pre-select cat from ?cat= URL param, then run
+    (function() {
+        const cat = new URLSearchParams(window.location.search).get('cat') || '';
+        if (cat) {
+            const btn = document.querySelector(`.cat-filter-btn[data-cat="${cat}"]`);
+            if (btn) { activeCat = cat; btn.classList.add('active'); document.querySelector('.cat-filter-btn[data-cat=""]').classList.remove('active'); }
+        }
+        runAnalysis();
+    })();
+</script>
+</body>
+</html>
